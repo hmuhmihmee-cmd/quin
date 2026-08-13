@@ -1,0 +1,1828 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>test</title>
+  <style>
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+<p><img src="media/image1.png"
+style="width:7.8086in;height:1.18194in" /></p>
+<p><img src="media/image3.png"
+style="width:2.68125in;height:0.86458in" /></p>
+<h1 id="mệnh-đề"><strong>1. Mệnh đề</strong></h1>
+<blockquote>
+<p><img src="media/image5.png"
+style="width:7.08819in;height:1.15094in" /></p>
+</blockquote>
+<h1 id="mệnh-đề-chứa-biến"><strong>2. Mệnh đề chứa biến</strong></h1>
+<blockquote>
+<p><img src="media/image5.png"
+style="width:7.08819in;height:0.67925in" /></p>
+<p>Xét câu “<img src="media/image7.wmf" /> chia hết cho <img
+src="media/image8.wmf" />” (n là số tự nhiên).</p>
+<p><strong>a.</strong> Câu đã cho có phải mệnh đề hay không?</p>
+<p><strong>b.</strong> Tìm hai giá trị của <img
+src="media/image7.wmf" /> sao cho câu trên là khẳng định đúng, hai giá
+trị của <img src="media/image7.wmf" /> sao cho câu trên là khẳng định
+sai.</p>
+<p><strong>Trả lời:</strong></p>
+<p><strong>a.</strong> Câu đã cho có phải mệnh đề hay không?</p>
+<p>Câu “<img src="media/image7.wmf" /> chia hết cho <img
+src="media/image8.wmf" />” là một <em>khắng định</em>, nhưng không là
+<em>mệnh đề</em></p>
+<p><em>(vì khẳng định này có thể đúng hoặc sai, tuỳ theo giá trị
+của</em> <img src="media/image7.wmf" /><em>).</em></p>
+<p>Tuy nhiên, khi thay <img src="media/image7.wmf" /> bằng một số tự
+nhiên cụ thể thì ta nhận được một mệnh đề.</p>
+<p>Người ta gọi “<img src="media/image7.wmf" /> chia hết cho <img
+src="media/image8.wmf" />” là một <em><strong>mệnh đề chứa
+biến</strong></em> (biến <img src="media/image7.wmf" />),</p>
+<p>Kí hiệu <img src="media/image9.wmf" />. Ta viết <img
+src="media/image9.wmf" />: “<img src="media/image7.wmf" /> chia hết cho
+<img src="media/image8.wmf" />” (<img src="media/image7.wmf" /> là số tự
+nhiên).</p>
+<p><strong>b.</strong> Tìm hai giá trị của <img
+src="media/image7.wmf" /> sao cho câu trên là khẳng định đúng, hai giá
+trị của <img src="media/image7.wmf" /> sao cho câu trên là khẳng định
+sai.</p>
+<p>Với <img src="media/image10.wmf" /> thì <img
+src="media/image11.wmf" /> và <img src="media/image12.wmf" /> đúng vì
+<img src="media/image13.wmf" /> và <img src="media/image14.wmf" />.</p>
+<p>Với <img src="media/image15.wmf" /> thì <img
+src="media/image16.wmf" /> và <img src="media/image17.wmf" /> sai.</p>
+</blockquote>
+<h1 id="phủ-định-của-một-mệnh-đề"><strong>3. Phủ định của một mệnh
+đề</strong></h1>
+<blockquote>
+<p><img src="media/image5.png"
+style="width:7.08819in;height:1.58491in" /></p>
+</blockquote>
+<h1 id="mệnh-đề-kéo-theo"><strong>4. Mệnh đề kéo theo</strong></h1>
+<blockquote>
+<p><img src="media/image5.png"
+style="width:7.08819in;height:2.08491in" /></p>
+<p><img src="media/image59.png"
+style="width:6.7438in;height:2.10377in" /></p>
+</blockquote>
+<h1 id="mệnh-đề-đảo-hai-mệnh-đề-tương-đương"><strong>5. Mệnh đề đảo –
+Hai mệnh đề tương đương</strong></h1>
+<blockquote>
+<p><img src="media/image5.png"
+style="width:7.08819in;height:0.95283in" /></p>
+<p><img src="media/image5.png"
+style="width:7.08819in;height:1.76415in" /></p>
+</blockquote>
+<h1 id="kí-hiệu-với-mọi-và-tồn-tại"><strong>6. Kí hiệu “với mọi” và “tồn
+tại”</strong></h1>
+<blockquote>
+<p><img src="media/image5.png"
+style="width:7.08819in;height:1.93396in" /></p>
+<p><img src="media/image5.png"
+style="width:7.08819in;height:2.2416in" /></p>
+<p><img src="media/image5.png"
+style="width:7.08819in;height:1.66981in" /></p>
+</blockquote>
+<p><strong><br />
+</strong></p>
+<p><img src="media/image3.png"
+style="width:2.74528in;height:0.86458in" /></p>
+<h2 id="dạng-1.-mệnh-đề-và-tính-đúng-sai-của-mệnh-đề"> <strong>Dạng 1.
+Mệnh đề và tính đúng sai của mệnh đề</strong></h2>
+<p><img src="media/image123.png"
+style="width:7.30631in;height:4.72917in" /></p>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:2.375in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<table>
+<colgroup>
+<col style="width: 31%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 28%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th><strong>Câu</strong></th>
+<th><strong>Mệnh đề đúng</strong></th>
+<th><strong>Mệnh đề sai</strong></th>
+<th><strong>Không phải mệnh đề</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><img src="media/image124.wmf" /></td>
+<td></td>
+<td>X</td>
+<td></td>
+</tr>
+<tr class="even">
+<td><img src="media/image125.wmf" /></td>
+<td></td>
+<td></td>
+<td>X</td>
+</tr>
+<tr class="odd">
+<td><img src="media/image126.wmf" /></td>
+<td>X</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>15 không chia hết cho 3</td>
+<td></td>
+<td>X</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><img src="media/image127.wmf" />có phải số nguyên ?</td>
+<td></td>
+<td></td>
+<td>X</td>
+</tr>
+</tbody>
+</table>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:2.375in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<table>
+<colgroup>
+<col style="width: 17%" />
+<col style="width: 41%" />
+<col style="width: 41%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th><img src="media/image134.wmf" /></th>
+<th><strong>Mệnh đề</strong></th>
+<th><strong>Đúng / Sai</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><img src="media/image135.wmf" /></td>
+<td><img src="media/image137.wmf" /></td>
+<td>Sai</td>
+</tr>
+<tr class="even">
+<td><img src="media/image136.wmf" /></td>
+<td><img src="media/image138.wmf" /></td>
+<td>Đúng</td>
+</tr>
+</tbody>
+</table>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:1.55208in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+<p>Câu không phải mệnh đề là <strong>⑴</strong> và
+<strong>⑵</strong>.</p>
+<p>Câu <strong>⑶</strong> là mệnh đề sai và câu <strong>⑷</strong> là
+mệnh đề đúng.</p>
+</blockquote>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:1.3125in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><strong>⑴</strong> Mệnh đề <img src="media/image148.wmf" /> là “Nếu
+tam giác <img src="media/image149.wmf" /> vuông thì <img
+src="media/image150.wmf" />”.</p>
+<blockquote>
+<p>Mệnh đề <img src="media/image151.wmf" /> sai vì chưa chắc tam giác đã
+vuông tại <img src="media/image152.wmf" />.</p>
+</blockquote>
+<p><strong>⑵</strong> Mệnh đề <img src="media/image153.wmf" /> là “Nếu
+tam giác <img src="media/image154.wmf" /> có <img
+src="media/image155.wmf" />thì tam giác vuông”.</p>
+<blockquote>
+<p>Mệnh đề <img src="media/image156.wmf" /> đúng (theo định lí
+Pitago).</p>
+</blockquote>
+<p><strong><br />
+</strong></p>
+<h2 id="dạng-2.-mệnh-đề-chứa-biến"> <strong>Dạng 2. Mệnh đề chứa
+biến</strong></h2>
+<p><img src="media/image123.png"
+style="width:7.30631in;height:1.48958in" /></p>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:1.55208in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><strong>⑴</strong> <img
+src="media/image162.wmf" /><strong>.</strong></p>
+<blockquote>
+<p>Ta có “<img src="media/image163.wmf" />” là mệnh đề sai.</p>
+</blockquote>
+<p><strong>⑵</strong> <img
+src="media/image159.wmf" /><strong>.</strong></p>
+<blockquote>
+<p>Ta có “<img src="media/image164.wmf" />” là mệnh đề đúng.</p>
+</blockquote>
+<p><strong>⑶</strong> <img
+src="media/image165.wmf" /><strong>.</strong></p>
+<blockquote>
+<p>Ta có “<img src="media/image166.wmf" />” là mệnh đề sai và <img
+src="media/image167.wmf" /> là mệnh đề sai.</p>
+</blockquote>
+<p><strong>⑷</strong> <img
+src="media/image168.wmf" /><strong>.</strong></p>
+<blockquote>
+<p>Ta có “<img src="media/image169.wmf" />” là mệnh đề sai vì <img
+src="media/image170.wmf" /> với mọi số tự nhiên.</p>
+</blockquote>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:1.80208in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><strong>⑴</strong> <em>Với</em> <img src="media/image177.wmf" /><em>,
+cho mệnh đề chứa biến</em> <img
+src="media/image178.wmf" /><em>”</em><img src="media/image179.wmf" />
+<em>chia hết cho 4”. Xét tính đúng sai của mệnh đề</em> <img
+src="media/image180.wmf" /></p>
+<blockquote>
+<p>Với <img src="media/image181.wmf" /> thì <img
+src="media/image182.wmf" /> là số lẻ nên không chia hết cho 4.</p>
+<p>Vậy <img src="media/image183.wmf" /> là mệnh đề sai.</p>
+</blockquote>
+<p><strong>⑵</strong> <em>Xét tính đúng sai của mệnh đề</em> <img
+src="media/image184.wmf" /><em>”</em><img src="media/image185.wmf" />
+<em>chia hết cho 11”.</em></p>
+<blockquote>
+<p>Xét biểu thức <img src="media/image186.wmf" />, với <img
+src="media/image187.wmf" />. Ta có với <img src="media/image188.wmf" />
+thì <img src="media/image189.wmf" /> chia hết cho 11.</p>
+<p>Vậy mệnh đề đã cho là mệnh đề đúng.</p>
+</blockquote>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:1.29167in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><strong>⑴</strong> <img
+src="media/image195.wmf" /><em><strong>”</strong></em><img
+src="media/image196.wmf" /><em><strong>”.</strong></em></p>
+<blockquote>
+<p>Với <img src="media/image197.wmf" />, ta có <img
+src="media/image198.wmf" />”<img src="media/image199.wmf" />” là mệnh đề
+đúng.</p>
+<p>Với <img src="media/image200.wmf" />, ta có <img
+src="media/image201.wmf" />”<img src="media/image202.wmf" />” là mệnh đề
+sai.</p>
+</blockquote>
+<p><strong>⑵</strong> <img src="media/image203.wmf" /><em>”</em><img
+src="media/image204.wmf" /> <em>chia hết cho 3, với</em> <img
+src="media/image205.wmf" /><em>”.</em></p>
+<blockquote>
+<p>Với <img src="media/image206.wmf" />, ta có <img
+src="media/image207.wmf" />”6 chia hết cho 3” là mệnh đề đúng.</p>
+<p>Với <img src="media/image208.wmf" />, ta có <img
+src="media/image209.wmf" />”5 chia hết cho 3” là mệnh đề sai.</p>
+</blockquote>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:1.92708in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><strong>⑴</strong> <em>Tích của ba số tự nhiên liên tiếp chia hết cho
+sáu.</em></p>
+<blockquote>
+<p><img src="media/image211.wmf" />.</p>
+</blockquote>
+<p><strong>⑵</strong> <em>Với mọi số thực, bình phương của nó là số
+không âm.</em></p>
+<blockquote>
+<p><img src="media/image212.wmf" />.</p>
+</blockquote>
+<p><strong>⑶</strong> <em>Có một số nguyên mà bình phương của nó bằng
+chính nó.</em></p>
+<blockquote>
+<p><img src="media/image213.wmf" />.</p>
+</blockquote>
+<p><strong>⑷</strong> <em>Có một số hữu tỉ mà nghịch đảo của nó lớn hơn
+chính nó.</em></p>
+<blockquote>
+<p><img src="media/image214.wmf" />.</p>
+</blockquote>
+<h2 id="dạng-3.-phủ-định-mệnh-đề"> <strong>Dạng 3. Phủ định mệnh
+đề</strong></h2>
+<p><img src="media/image123.png"
+style="width:7.30631in;height:4.23958in" /></p>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:2.13542in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><strong>⑴</strong> <img src="media/image234.wmf" /> <em>“ Hình thoi
+có hai đường chéo vuông góc với nhau”.</em></p>
+<blockquote>
+<p><img src="media/image235.wmf" />:“Hai đường chéo của hình thoi không
+vuông góc với nhau”. Mệnh đề sai.</p>
+</blockquote>
+<p><strong>⑵</strong> <img src="media/image236.wmf" /> <em>“ Tổng hai
+cạnh của một tam giác nhỏ hơn cạnh còn lại”.</em></p>
+<blockquote>
+<p><img src="media/image237.wmf" />:“Tổng hai cạnh của một tam giác lớn
+hơn hoặc bằng cạnh còn lại”. Mệnh đề đúng.</p>
+</blockquote>
+<p><strong>⑶</strong> <img src="media/image238.wmf" /> <em>“ Trong tam
+giác tổng ba góc không bằng</em> <img src="media/image239.wmf" />
+<em>”.</em></p>
+<blockquote>
+<p><img src="media/image240.wmf" />: “Trong một tam giác tổng ba góc
+bằng <img src="media/image241.wmf" />”. Mệnh đề đúng.</p>
+</blockquote>
+<p><strong>⑷</strong> <img src="media/image242.wmf" /> <em>“ Tồn tại
+hình thang là hình vuông”.</em></p>
+<blockquote>
+<p><img src="media/image243.wmf" />: “ Mọi hình thang đều không là hình
+vuông”. Mệnh đề sai.</p>
+</blockquote>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:2.21875in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><strong>⑴</strong> <img src="media/image251.wmf" /><em>: “ 6 là số
+nguyên tố”</em></p>
+<blockquote>
+<p><img src="media/image252.wmf" />: “<img src="media/image253.wmf" />
+là hợp số”.</p>
+<p>Mệnh đề <img src="media/image254.wmf" /> đúng</p>
+</blockquote>
+<p><strong>⑵</strong> <img src="media/image255.wmf" /><em>: “</em><img
+src="media/image256.wmf" /> <em>là một số nguyên”.</em></p>
+<blockquote>
+<p><img src="media/image257.wmf" />: “<img src="media/image258.wmf" />
+không phải là một số nguyên”.</p>
+<p>Mệnh đề <img src="media/image259.wmf" /> sai vì <img
+src="media/image260.wmf" /></p>
+</blockquote>
+<p><strong>⑶</strong> <img src="media/image261.wmf" /><em>: “</em><img
+src="media/image262.wmf" /><em>là một số chính phương”.</em></p>
+<blockquote>
+<p><img src="media/image263.wmf" />: “<img
+src="media/image264.wmf" />không phải là số chính phương”.</p>
+<p>Mệnh đề <img src="media/image265.wmf" /> sai vì với <img
+src="media/image266.wmf" />,ta có <img src="media/image267.wmf" />là một
+số chính phương.</p>
+</blockquote>
+<p><strong>⑷</strong> <img src="media/image268.wmf" /><em>: “</em><img
+src="media/image269.wmf" /> <em>là hợp số”.</em></p>
+<blockquote>
+<p><img src="media/image270.wmf" />. “<img src="media/image271.wmf" />là
+số nguyên tố”.</p>
+<p>Mệnh đề <img src="media/image272.wmf" /> đúng vì với <img
+src="media/image273.wmf" />, ta có <img src="media/image274.wmf" /> là
+một số nguyên tố.</p>
+</blockquote>
+<p><img src="media/image128.png"
+style="width:7.30625in;height:1.58333in" /></p>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><strong>⑴</strong> <img src="media/image280.wmf" /><em>”</em><img
+src="media/image281.wmf" /><em>chia hết cho 4”.</em></p>
+<blockquote>
+<p><img src="media/image282.wmf" />”<img src="media/image283.wmf" />
+không chia hết cho 4”.</p>
+<p>Mệnh đề này sai.</p>
+</blockquote>
+<p><strong>⑵</strong> <img src="media/image284.wmf" /><em>”</em><img
+src="media/image285.wmf" /> <em>chia hết cho</em> <img
+src="media/image286.wmf" /><em>”.</em></p>
+<blockquote>
+<p><img src="media/image287.wmf" />”<img src="media/image288.wmf" />
+không chia hết cho <img src="media/image289.wmf" />”.</p>
+<p>Mệnh đề này sai.</p>
+</blockquote>
+<p><strong><br />
+</strong><img src="media/image3.png"
+style="width:2.74528in;height:0.86458in" /></p>
+<ol type="A">
+<li><p><em><strong>Câu hỏi – Trả lời trắc nghiệm</strong></em></p></li>
+</ol>
+<ol type="1">
+<li><p>Phát biểu nào sau đây là một mệnh đề?</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> Mùa thu Hà Nội đẹp quá! <strong>B.</strong> Bạn
+có đi học không?</p>
+<p><strong>C.</strong> Đề thi môn Toán khó quá!
+<strong><u>D</u>.</strong> Hà Nội là thủ đô của Việt Nam.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn D</mark></strong></p>
+<p>Phát biểu ở <img src="media/image290.wmf" /> là câu cảm và câu hỏi
+nên không là mệnh đề.</p>
+</blockquote>
+<ol start="2" type="1">
+<li><p>Cho các phát biểu sau đây:</p></li>
+</ol>
+<blockquote>
+<p>1. "17 là số nguyên tố"</p>
+<p>2. "Tam giác vuông có một đường trung tuyến bằng nửa cạnh huyền"</p>
+<p>3. "Các em C14 hãy cố gắng học tập thật tốt nhé !"</p>
+<p>4. "Mọi hình chữ nhật đều nội tiếp được đường tròn"</p>
+<p>Hỏi có bao nhiêu phát biểu là một mệnh đề?</p>
+<p><strong>A.</strong> <img src="media/image291.wmf" />.
+<strong><u>B</u>.</strong> <img src="media/image292.wmf" />.
+<strong>C.</strong> <img src="media/image293.wmf" />.
+<strong>D.</strong> <img src="media/image294.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+<p>Câu 1 là mệnh đề.</p>
+<p>Câu 2 là mệnh đề.</p>
+<p>Câu 3 không phải là mệnh đề.</p>
+<p>Câu 4 là mệnh đề.</p>
+</blockquote>
+<ol start="3" type="1">
+<li><p>Câu nào trong các câu sau không phải là mệnh đề?</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> <img src="media/image295.wmf" /> có phải
+là một số vô tỷ không? <strong>B.</strong> <img
+src="media/image296.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image297.wmf" /> là một số hữu
+tỷ. <strong>D.</strong> <img src="media/image298.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+</blockquote>
+<ol start="4" type="1">
+<li><p>Trong các câu sau, câu nào không phải là mệnh đề?</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> Buồn ngủ quá!</p>
+<p><strong>B.</strong> Hình thoi có hai đường chéo vuông góc với
+nhau.</p>
+<p><strong>C.</strong> <img src="media/image299.wmf" /> là số chính
+phương.</p>
+<p><strong>D.</strong> Băng Cốc là thủ đô của Mianma.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>Câu cảm thán không phải là mệnh đề.</p>
+</blockquote>
+<ol start="5" type="1">
+<li><p>Trong các câu sau, có bao nhiêu câu là mệnh đề?</p></li>
+</ol>
+<blockquote>
+<p>a) Hãy đi nhanh lên!</p>
+<p>b) Hà Nội là thủ đô của Việt Nam.</p>
+<p>c) <img src="media/image300.wmf" />.</p>
+<p>d) Năm <img src="media/image301.wmf" /> là năm nhuận.</p>
+<p><strong>A.</strong> <img src="media/image302.wmf" />
+<strong><u>B</u>.</strong> <img src="media/image303.wmf" />
+<strong>C.</strong> <img src="media/image304.wmf" /> <strong>D.</strong>
+<img src="media/image305.wmf" /></p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+<p>Câu a) là câu cảm thán không phải là mệnh đề.</p>
+</blockquote>
+<ol start="6" type="1">
+<li><p>Trong các câu sau, câu nào là mệnh đề?</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> Đi ngủ đi!</p>
+<p><strong><u>B</u>.</strong> Trung Quốc là nước đông dân nhất thế
+giới.</p>
+<p><strong>C.</strong> Bạn học trường nào?</p>
+<p><strong>D.</strong> Không được làm việc riêng trong giờ học.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+</blockquote>
+<ol start="7" type="1">
+<li><p>Mệnh đề <img src="media/image306.wmf" /> với <img
+src="media/image307.wmf" /> là số thực cho trước. Tìm <img
+src="media/image308.wmf" /> để mệnh đề đúng</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> <img src="media/image309.wmf" />
+<strong>B.</strong> <img src="media/image310.wmf" /> <strong>C.</strong>
+<img src="media/image311.wmf" /> <strong><u>D</u>.</strong> <img
+src="media/image312.wmf" /></p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>Vì <img src="media/image313.wmf" />.</p>
+</blockquote>
+<ol start="8" type="1">
+<li><p>Với giá trị nào của <img src="media/image314.wmf" /> thì "<img
+src="media/image315.wmf" />" là mệnh đề đúng.</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> <img src="media/image316.wmf" />
+<strong>B.</strong> <img src="media/image317.wmf" /> <strong>C.</strong>
+<img src="media/image318.wmf" /> <strong>D.</strong> <img
+src="media/image319.wmf" /></p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>B. Không hiểu rõ câu hỏi và tập <img src="media/image320.wmf" />.</p>
+<p>C. Không hiểu rõ câu hỏi và tập <img src="media/image321.wmf" />.</p>
+<p>D. Không biết giải phương trình.</p>
+</blockquote>
+<ol start="9" type="1">
+<li><p>Chọn mệnh đề đúng trong các mệnh đề sau.</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> <img src="media/image322.wmf" /> sao cho
+<img src="media/image323.wmf" />. <strong>B.</strong> <img
+src="media/image324.wmf" /> sao cho <img
+src="media/image325.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image326.wmf" /> sao cho <img
+src="media/image327.wmf" />. <strong>D.</strong> <img
+src="media/image328.wmf" /> sao cho <img
+src="media/image329.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>A: Đúng vì VT luôn lớn hơn VP 1 đơn vị.</p>
+<p>B: HS nhằm trong tập hợp số tự nhiên.</p>
+<p>C: HS nhầm là tìm được <img src="media/image330.wmf" /> ở VT để được
+số chính phương ở VP.</p>
+<p>D: HS nhầm ở số <img src="media/image331.wmf" />.</p>
+</blockquote>
+<ol start="10" type="1">
+<li><p>Trong các mệnh đề sau, mệnh đề nào đúng?</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> <img src="media/image332.wmf" /> là số hữu
+tỷ.</p>
+<p><strong>B.</strong> Phương trình <img src="media/image333.wmf" /> có
+<img src="media/image334.wmf" /> nghiệm trái dấu.</p>
+<p><strong>C.</strong> <img src="media/image335.wmf" /> là số chẵn.</p>
+<p><strong>D.</strong> Phương trình <img src="media/image336.wmf" /> có
+nghiệm.<img src="media/image337.wmf" /></p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+<p>Phương trình <img src="media/image338.wmf" />có <img
+src="media/image339.wmf" /> nên có hai nghiệm trái dấu.</p>
+<p>Vậy mệnh đề ở phương án B là mệnh đề đúng. Các mệnh đề còn lại đều
+sai.</p>
+</blockquote>
+<ol start="11" type="1">
+<li><p>Trong các câu sau, câu nào là mệnh đề đúng?</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> Nếu <img src="media/image340.wmf" /> thì <img
+src="media/image341.wmf" />.</p>
+<p><strong><u>B</u>.</strong> Nếu <img src="media/image342.wmf" /> chia
+hết cho <img src="media/image343.wmf" /> thì <img
+src="media/image344.wmf" /> chia hết cho <img
+src="media/image345.wmf" />.</p>
+<p><strong>C.</strong> Nếu em chăm chỉ thì em thành công.</p>
+<p><strong>D.</strong> Nếu một tam giác có một góc bằng <img
+src="media/image346.wmf" /> thì tam giác đó đều.</p>
+<p> <em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+<p>Mệnh đề A là một mệnh đề sai vì <img src="media/image347.wmf" /> thì
+<img src="media/image348.wmf" />.</p>
+<p>Mệnh đề B là một mệnh đề đúng vì <img
+src="media/image349.wmf" />.</p>
+<p>Câu C chưa là mệnh đề vì chưa khẳng định được tính đúng, sai.</p>
+<p>Mệnh đề D là mệnh đề sai vì chưa đủ điều kiện để khẳng định một tam
+giác là đều.</p>
+</blockquote>
+<ol start="12" type="1">
+<li><p>Trong các mệnh đề sau, mệnh đề nào sai?</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> <img src="media/image350.wmf" />.
+<strong>B.</strong> <img src="media/image351.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image352.wmf" />.
+<strong>D.</strong> <img src="media/image353.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>Xét đáp án A. Ta có: <img src="media/image354.wmf" />. Suy ra A
+sai.</p>
+</blockquote>
+<ol start="13" type="1">
+<li><p>Hỏi trong các mệnh đề sau đây mệnh đề nào là mệnh đề
+đúng?</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> <img src="media/image355.wmf" />.
+<strong>B.</strong> <img src="media/image356.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image357.wmf" />.
+<strong>D.</strong> <img src="media/image358.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>B,C,D sai là không biết mệnh đề kéo theo.</p>
+</blockquote>
+<ol start="14" type="1">
+<li><p>Cho mệnh đề : <img src="media/image359.wmf" />. Mệnh đề phủ định
+của mệnh đề trên là</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> <img src="media/image360.wmf" />.
+<strong><u>B</u>.</strong> <img src="media/image361.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image362.wmf" />.
+<strong>D.</strong> <img src="media/image363.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+<p>Chú ý: Phủ định của mệnh đề: <img src="media/image364.wmf" /> là <img
+src="media/image365.wmf" />.</p>
+</blockquote>
+<ol start="15" type="1">
+<li><p>Cho mệnh đề "Có một học sinh trong lớp C4 không chấp hành luật
+giao thông". Mệnh đề phủ định của mệnh đề này là</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> Không có học sinh nào trong lớp <img
+src="media/image366.wmf" /> chấp hành luật giao thông.</p>
+<p><strong><u>B</u>.</strong> Mọi học sinh trong lớp <img
+src="media/image367.wmf" /> đều chấp hành luật giao thông.</p>
+<p><strong>C.</strong> Có một học sinh trong lớp C4 chấp hành luật giao
+thông.</p>
+<p><strong>D.</strong> Mọi học sinh trong lớp <img
+src="media/image368.wmf" /> không chấp hành luật giao thông.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+<p>Mệnh đề phủ định là " Mọi học sinh trong lớp C4 đều chấp hành luật
+giao thông".</p>
+</blockquote>
+<ol start="16" type="1">
+<li><p>Cho mệnh đề: " Có một học sinh trong lớp 10A không thích học môn
+Toán". Mệnh đề phủ định của mệnh đề này là:</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> "Mọi học sinh trong lớp 10A đều thích học
+môn Toán".</p>
+<p><strong>B.</strong> "Mọi học sinh trong lớp 10A đều không thích học
+môn Toán".</p>
+<p><strong>C.</strong> "Mọi học sinh trong lớp 10A đều thích học môn
+Văn".</p>
+<p><strong>D.</strong> "Có một học sinh trong lớp 10A thích học môn
+Toán".</p>
+<p> <em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+</blockquote>
+<ol start="17" type="1">
+<li><p>Mệnh đề phủ định của mệnh đề "2018 là số tự nhiên chẵn"
+là</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> <img src="media/image369.wmf" /> là số chẵn.</p>
+<p><strong>B.</strong> <img src="media/image370.wmf" /> là số nguyên
+tố.</p>
+<p><strong><u>C</u>.</strong> <img src="media/image371.wmf" /> không là
+số tự nhiên chẵn.</p>
+<p><strong>D.</strong> <img src="media/image372.wmf" /> là số chính
+phương.</p>
+<p> <em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn C</mark></strong></p>
+</blockquote>
+<ol start="18" type="1">
+<li><p>Mệnh đề: "Mọi động vật đều di chuyền" có mệnh đề phủ định
+là</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> Có ít nhất một động vật di chuyền.</p>
+<p><strong>B.</strong> Mọi động vật đều đứng yên.</p>
+<p><strong>C.</strong> Có ít nhất một động vật không di chuyển.</p>
+<p><strong>D.</strong> Mọi động vật đều không di chuyển.</p>
+<p> <em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn C</mark></strong></p>
+</blockquote>
+<ol start="19" type="1">
+<li><p>Cho mệnh đề: "<img src="media/image373.wmf" />". Mệnh đề phủ định
+sẽ là</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> "<img src="media/image374.wmf" />".
+<strong>B.</strong> "<img src="media/image375.wmf" />”.</p>
+<p><strong>C.</strong> "<img src="media/image376.wmf" />”.
+<strong>D.</strong> "<img src="media/image377.wmf" />".</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>Đáp án A đúng vì phủ định của " <img src="media/image378.wmf" /> " là
+" <img src="media/image379.wmf" /> " và phủ định của dấu " <img
+src="media/image380.wmf" /> " là dấu " <img src="media/image381.wmf" />
+".</p>
+<p>Đáp án B sai vì học sinh nhầm phủ định của dấu "&lt;" là dấu " <img
+src="media/image382.wmf" /> ".</p>
+<p>Đáp án C sai vì học sinh không nhớ phủ định của "<img
+src="media/image383.wmf" />" là "<img src="media/image384.wmf" />" và
+phủ định dấu "&lt;" là dấu <img src="media/image385.wmf" />". Đáp án D
+sai vì học sinh không nhớ phủ định của "<img
+src="media/image386.wmf" />" là "<img src="media/image387.wmf" />".</p>
+</blockquote>
+<ol start="20" type="1">
+<li><p>Mệnh đề phủ định của mệnh đề: <img src="media/image388.wmf" />
+là</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> <img src="media/image389.wmf" />.
+<strong>B.</strong> <img src="media/image390.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image391.wmf" />.
+<strong>D.</strong> <img src="media/image392.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>B: HS quên biến đồi lượng từ.</p>
+<p>C: HS quên trường hợp dấu bằng.</p>
+<p>D: HS quên cả đồi lượng từ và dấu bằng.</p>
+</blockquote>
+<ol start="21" type="1">
+<li><p>Mệnh đề phủ định của mệnh đề "Phương trình <img
+src="media/image393.wmf" /> vô nghiệm" là mệnh đề nào sau đây?</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> Phương trình <img
+src="media/image394.wmf" /> có nghiệm.</p>
+<p><strong>B.</strong> Phương trình <img src="media/image395.wmf" /> có
+<img src="media/image396.wmf" /> nghiệm phân biệt.</p>
+<p><strong>C.</strong> Phương trình <img src="media/image397.wmf" /> có
+nghiệm kép.</p>
+<p><strong>D.</strong> Phương trình <img src="media/image398.wmf" />
+không có nghiệm.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>Đáp án A đúng vì phủ định vô nghiệm là có nghiệm.</p>
+<p>Đáp án B sai vì học sinh nhầm phủ định vô nghiệm là phương trình sẽ
+có <img src="media/image399.wmf" /> nghiệm phân biệt.</p>
+<p>Đáp án C sai vì học sinh nhầm phủ định vô nghiệm là có <img
+src="media/image400.wmf" /> nghiệm tức nghiệm kép.</p>
+<p>Đáp án D sai vì học sinh không hiểu câu hỏi của đề, học sinh nghỉ vô
+nghiệm là không có nghiệm.</p>
+</blockquote>
+<ol start="22" type="1">
+<li><p>Tìm mệnh đề phủ định của mệnh đề: <img
+src="media/image401.wmf" />.</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> <img src="media/image402.wmf" />.
+<strong>B.</strong> <img src="media/image403.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image404.wmf" />.
+<strong><u>D</u>.</strong> <img src="media/image405.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn D</mark></strong></p>
+<p><img src="media/image406.wmf" />. Suy ra mệnh đề phủ định là <img
+src="media/image407.wmf" />.</p>
+</blockquote>
+<ol start="23" type="1">
+<li><p>Tìm mệnh đề phủ định của mệnh đề " <img
+src="media/image408.wmf" /> ".</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> <img src="media/image409.wmf" />.
+<strong>B.</strong> <img src="media/image410.wmf" />.</p>
+<p><strong><u>C</u>.</strong> <img src="media/image411.wmf" />.
+<strong>D.</strong> <img src="media/image412.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn C</mark></strong></p>
+<p>Mệnh đề <img src="media/image413.wmf" />.</p>
+</blockquote>
+<ol start="24" type="1">
+<li><p>Cho <img src="media/image414.wmf" /> là số tự nhiên. Phủ định của
+mệnh đề "<img src="media/image415.wmf" /> chẵn, <img
+src="media/image416.wmf" /> là số chẵn" là mệnh đề:</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> <img src="media/image417.wmf" /> lẻ, <img
+src="media/image418.wmf" /> là số lẻ. <strong>B.</strong> <img
+src="media/image419.wmf" /> lẻ, <img src="media/image420.wmf" /> là số
+chẵn.</p>
+<p><strong>C.</strong> <img src="media/image421.wmf" /> lẻ, <img
+src="media/image422.wmf" /> là số lẻ. <strong><u>D</u>.</strong> <img
+src="media/image423.wmf" /> chẵn, <img src="media/image424.wmf" /> là số
+lẻ.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn D</mark></strong></p>
+<p>Mệnh đề phủ định là " <img src="media/image425.wmf" /> lẻ, <img
+src="media/image426.wmf" /> lẻ".</p>
+</blockquote>
+<ol start="25" type="1">
+<li><p>Phủ định của mệnh đề "<img src="media/image427.wmf" />"
+là</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> "<img src="media/image428.wmf" />".
+<strong>B.</strong> "<img src="media/image429.wmf" />".</p>
+<p><strong><u>C</u>.</strong> "<img src="media/image430.wmf" />.
+<strong>D.</strong> "<img src="media/image431.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn C</mark></strong></p>
+<p>Vì phủ định của mệnh đề "<img src="media/image432.wmf" />" là "<img
+src="media/image433.wmf" />".</p>
+</blockquote>
+<ol start="26" type="1">
+<li><p>Cho mệnh đề " <img src="media/image434.wmf" /> ". Hỏi mệnh đề nào
+là mệnh đề phủ định của mệnh đề trên?</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> <img src="media/image435.wmf" />.
+<strong>B.</strong> <img src="media/image436.wmf" />.</p>
+<p><strong><u>C</u>.</strong> <img src="media/image437.wmf" />.
+<strong>D.</strong> <img src="media/image438.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn C</mark></strong></p>
+<p>Phủ định của mệnh đề "<img src="media/image439.wmf" />" là mệnh đề
+"<img src="media/image440.wmf" />".</p>
+</blockquote>
+<ol start="27" type="1">
+<li><p>Tìm mệnh đề phủ định của mệnh đề <img
+src="media/image441.wmf" />.</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> <img src="media/image442.wmf" />.
+<strong><u>B</u>.</strong> <img src="media/image443.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image444.wmf" />.
+<strong>D.</strong> <img src="media/image445.wmf" />.</p>
+<p> <em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+</blockquote>
+<ol start="28" type="1">
+<li><p>Trong các mệnh đề sau đây, mệnh đề nào có <strong>mệnh đề
+đảo</strong> là đúng?</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> Nếu <img src="media/image446.wmf" /> và <img
+src="media/image447.wmf" /> cùng chia hết cho <img
+src="media/image448.wmf" /> thì <img src="media/image449.wmf" /> chia
+hết cho <img src="media/image450.wmf" />.</p>
+<p><strong>B.</strong> Nếu hai tam giác bằng nhau thì diện tích bằng
+nhau.</p>
+<p><strong><u>C</u>.</strong> Nếu <img src="media/image451.wmf" /> chia
+hết cho <img src="media/image452.wmf" /> thì <img
+src="media/image453.wmf" /> chia hết cho <img
+src="media/image454.wmf" />.</p>
+<p><strong>D.</strong> Nếu một số tận cùng bằng <img
+src="media/image455.wmf" /> thì số đó chia hết cho <img
+src="media/image456.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn C</mark></strong></p>
+<p>Nếu <img src="media/image457.wmf" /> chia hết cho <img
+src="media/image458.wmf" /> thì <img src="media/image459.wmf" /> chia
+hết cho <img src="media/image460.wmf" /> là mệnh đề đúng.</p>
+</blockquote>
+<ol start="29" type="1">
+<li><p>Trong các mệnh đề sau, mệnh đề nào là định lí?</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> <img src="media/image461.wmf" />.</p>
+<p><strong><u>B</u>.</strong> <img src="media/image462.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image463.wmf" />.</p>
+<p><strong>D.</strong> Nếu <img src="media/image464.wmf" /> chia hết cho
+<img src="media/image465.wmf" /> thì <img src="media/image466.wmf" />
+đều chia hết cho <img src="media/image467.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+<p>Định lí là <img src="media/image468.wmf" />.</p>
+</blockquote>
+<ol start="30" type="1">
+<li><p>Mệnh đề “<img src="media/image469.wmf" />” khẳng định
+rằng:</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> Bình phương của mỗi số thực bằng <img
+src="media/image470.wmf" />.</p>
+<p><strong><u>B</u>.</strong> Có ít nhất một số thực mà bình phương của
+nó bằng <img src="media/image471.wmf" />.</p>
+<p><strong>C.</strong> Chỉ có một số thực có bình phương bằng<img
+src="media/image472.wmf" />.</p>
+<p><strong>D.</strong> Nếu <img src="media/image473.wmf" /> là số thực
+thì<img src="media/image474.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+</blockquote>
+<ol start="31" type="1">
+<li><p>Mệnh đề nào sau đây là phủ định của mệnh đề: “Mọi động vật đều di
+chuyển”</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> Mọi động vật đều không di chuyển.</p>
+<p><strong>B.</strong> Mọi động vật đều đứng yên.</p>
+<p><strong><u>C</u>.</strong> Có ít nhất một động vật không di
+chuyển.</p>
+<p><strong>D.</strong> Có ít nhất một động vật di chuyển.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn C</mark></strong></p>
+<p>Phủ định của "mọi" là "có ít nhất"</p>
+<p>Phủ định của “đều di chuyển" là "không di chuyển".</p>
+</blockquote>
+<ol start="32" type="1">
+<li><p>Phủ định của mệnh đề: "Có ít nhất một số vô tỷ là số thập phân vô
+hạn tuần hoàn" là mệnh đề nào sau đây:</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> Mọi số vô tỷ đều là số thập phân vô hạn tuần
+hoàn.</p>
+<p><strong>B.</strong> Có ít nhất một số vô tỷ là số thập phân vô hạn
+không tuần hoàn.</p>
+<p><strong><u>C</u>.</strong> Mọi số vô tỷ đều là số thập phân vô hạn
+không tuần hoàn.</p>
+<p><strong>D.</strong> Mọi số vô tỷ đều là số thập phân tuần hoàn.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn C</mark></strong></p>
+<p>Phủ định của "có ít nhất" là "mọi"</p>
+<p>Phủ định của "tuần hoàn" là "không tuần hoàn".</p>
+</blockquote>
+<ol start="33" type="1">
+<li><p>Tìm mệnh đề <strong>sai</strong>.</p></li>
+</ol>
+<blockquote>
+<p><strong>A.</strong> " <img src="media/image475.wmf" />.
+<strong><u>B</u>.</strong> " <img src="media/image476.wmf" /> ".</p>
+<p><strong>C.</strong> " <img src="media/image477.wmf" /> ".
+<strong>D.</strong> " <img src="media/image478.wmf" /> ".</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn B</mark></strong></p>
+<p>Chọn <img src="media/image479.wmf" />. Vậy mệnh đề <img
+src="media/image480.wmf" /> sai</p>
+</blockquote>
+<ol start="34" type="1">
+<li><p>Mệnh đề nào sau đây đúng?</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> <img src="media/image481.wmf" />.
+<strong>B.</strong> <img src="media/image482.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image483.wmf" />.
+<strong>D.</strong> <img src="media/image484.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>Vì <img src="media/image485.wmf" />.</p>
+</blockquote>
+<ol start="35" type="1">
+<li><p>Chọn mệnh đề <strong>sai</strong>.</p></li>
+</ol>
+<blockquote>
+<p><strong><u>A</u>.</strong> <img src="media/image486.wmf" />.
+<strong>B.</strong> <img src="media/image487.wmf" />.</p>
+<p><strong>C.</strong> <img src="media/image488.wmf" />.
+<strong>D.</strong> <img src="media/image489.wmf" />.</p>
+<p><em><strong>Lời giải</strong></em></p>
+<p><strong><mark>Chọn A</mark></strong></p>
+<p>Với <img src="media/image490.wmf" /> thì <img
+src="media/image491.wmf" /> nên <img src="media/image492.wmf" />
+sai.</p>
+</blockquote>
+<ol start="2" type="A">
+<li><p><em><strong>Câu hỏi – Trả lời Đúng/sai</strong></em></p></li>
+</ol>
+<ol start="36" type="1">
+<li><p>Xét tính đúng, sai của các câu sau</p></li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 5%" />
+<col style="width: 77%" />
+<col style="width: 8%" />
+<col style="width: 7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th><strong>Mệnh đề</strong></th>
+<th><strong>Đúng</strong></th>
+<th><strong>Sai</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>(a)</strong></td>
+<td>P: "3 là số chính phương" có mệnh đề phủ định là <img
+src="media/image493.wmf" />: "<img src="media/image494.wmf" /> không là
+số chính phương".</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(b)</strong></td>
+<td>Q: "Tam giác <img src="media/image495.wmf" /> là tam giác cân" có
+mệnh đề phủ định là <img src="media/image496.wmf" />: "Tam giác <img
+src="media/image497.wmf" /> không là tam giác vuông".</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><strong>(c)</strong></td>
+<td>R: "<img src="media/image498.wmf" /> là số nguyên tố" có mệnh đề phủ
+định là <img src="media/image499.wmf" /> "<img
+src="media/image500.wmf" /> không là số nguyên tố".</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(d)</strong></td>
+<td><img src="media/image501.wmf" /> "<img src="media/image502.wmf" />
+là số vô tỉ" có mệnh đề phủ định là <img src="media/image503.wmf" /> là
+số hữu tỉ".</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><em><strong>(a)</strong> P: "3 là số chính phương" có mệnh đề phủ
+định là</em> <img src="media/image493.wmf" /><em>: "</em><img
+src="media/image494.wmf" /> <em>không là số chính phương".</em></p>
+<blockquote>
+<p><img src="media/image504.wmf" />: " <img src="media/image505.wmf" />
+không là số chính phương".</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(b)</strong> Q: "Tam giác</em> <img
+src="media/image495.wmf" /> <em>là tam giác cân" có mệnh đề phủ định
+là</em> <img src="media/image496.wmf" /><em>: "Tam giác</em> <img
+src="media/image497.wmf" /> <em>không là tam giác vuông".</em></p>
+<blockquote>
+<p><img src="media/image506.wmf" />: "Tam giác <img
+src="media/image507.wmf" /> không là tam giác cân".</p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(c)</strong> R: "</em><img src="media/image498.wmf" />
+<em>là số nguyên tố" có mệnh đề phủ định là</em> <img
+src="media/image499.wmf" /> <em>"</em><img src="media/image500.wmf" />
+<em>không là số nguyên tố".</em></p>
+<blockquote>
+<p><img src="media/image508.wmf" /> "<img src="media/image509.wmf" />
+không là số nguyên tố".</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(d)</strong></em> <img src="media/image501.wmf" />
+<em>"</em><img src="media/image502.wmf" /> <em>là số vô tỉ" có mệnh đề
+phủ định là</em> <img src="media/image503.wmf" /> <em>là số hữu
+tỉ".</em></p>
+<blockquote>
+<p><img src="media/image510.wmf" /> là số hữu tỉ".</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<ol start="37" type="1">
+<li><p>Hãy xác định tính đúng sai của mỗi mệnh đề sau:</p></li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 5%" />
+<col style="width: 77%" />
+<col style="width: 8%" />
+<col style="width: 7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th><strong>Mệnh đề</strong></th>
+<th><strong>Đúng</strong></th>
+<th><strong>Sai</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>(a)</strong></td>
+<td>A: "Năm 2010 là năm nhuận".</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(b)</strong></td>
+<td>B: “31 là số nguyên tố".</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><strong>(c)</strong></td>
+<td><img src="media/image511.wmf" />: "Mùa xuân bắt đầu từ tháng 6 và
+kết thúc vào tháng 9".</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(d)</strong></td>
+<td>Q: "Hình thoi là hình có bốn cạnh bằng nhau".</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><em><strong>(a)</strong> A: "Năm 2010 là năm nhuận".</em></p>
+<blockquote>
+<p>Vì 2010 không chia hết cho 4.</p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(b)</strong> B: “31 là số nguyên tố".</em></p>
+<blockquote>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(c)</strong></em> <img src="media/image511.wmf" /><em>:
+"Mùa xuân bắt đầu từ tháng 6 và kết thúc vào tháng 9".</em></p>
+<blockquote>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(d)</strong> Q: "Hình thoi là hình có bốn cạnh bằng
+nhau".</em></p>
+<blockquote>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<ol start="38" type="1">
+<li><p>Cho mệnh đề <img src="media/image512.wmf" /> với <img
+src="media/image513.wmf" /> là các số thực. Với mỗi giá trị thực của
+<img src="media/image514.wmf" /> sau đây, ta nhận được mệnh đề đúng hay
+sai?</p></li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 5%" />
+<col style="width: 77%" />
+<col style="width: 8%" />
+<col style="width: 7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th><strong>Mệnh đề</strong></th>
+<th><strong>Đúng</strong></th>
+<th><strong>Sai</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>(a)</strong></td>
+<td><img src="media/image515.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(b)</strong></td>
+<td><img src="media/image516.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><strong>(c)</strong></td>
+<td><img src="media/image517.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(d)</strong></td>
+<td><img src="media/image518.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><em><strong>(a)</strong></em> <img
+src="media/image515.wmf" /><em>;</em></p>
+<blockquote>
+<p><img src="media/image519.wmf" /></p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(b)</strong></em> <img
+src="media/image516.wmf" /><em>;</em></p>
+<blockquote>
+<p><img src="media/image520.wmf" /></p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(c)</strong></em> <img
+src="media/image517.wmf" /><em>;</em></p>
+<blockquote>
+<p><img src="media/image521.wmf" /></p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(d)</strong></em> <img
+src="media/image518.wmf" /><em>.</em></p>
+<blockquote>
+<p><img src="media/image522.wmf" /></p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<ol start="39" type="1">
+<li><p>Xét tính đúng, sai của các mệnh đề sau:</p></li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 5%" />
+<col style="width: 77%" />
+<col style="width: 8%" />
+<col style="width: 7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th><strong>Mệnh đề</strong></th>
+<th><strong>Đúng</strong></th>
+<th><strong>Sai</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>(a)</strong></td>
+<td>Phương trình <img src="media/image523.wmf" /> có nghiệm.</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(b)</strong></td>
+<td>16 không là số nguyên tố.</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><strong>(c)</strong></td>
+<td>Hai phương trình <img src="media/image524.wmf" /> và <img
+src="media/image525.wmf" /> có nghiệm chung.</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(d)</strong></td>
+<td>Buôn Mê Thuột là thành phố của tỉnh Quảng Ngãi.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><em><strong>(a)</strong> Phương trình</em> <img
+src="media/image523.wmf" /> <em>có nghiệm.</em></p>
+<blockquote>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(b)</strong> 16 không là số nguyên tố.</em></p>
+<blockquote>
+<p>Vì 16 có thể chia hết cho <img src="media/image526.wmf" />.</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(c)</strong> Hai phương trình</em> <img
+src="media/image524.wmf" /> <em>và</em> <img src="media/image525.wmf" />
+<em>có nghiệm chung.</em></p>
+<blockquote>
+<p>Vì hai phương trình này có <img src="media/image527.wmf" /> là nghiệm
+chung (thay <img src="media/image528.wmf" /> vào mỗi phương trình để
+kiểm chứng).</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(d)</strong> Buôn Mê Thuột là thành phố của tỉnh Quảng
+Ngãi.</em></p>
+<blockquote>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<ol start="40" type="1">
+<li><p>Xét tính đúng, sai của mỗi mệnh đề sau.</p></li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 5%" />
+<col style="width: 77%" />
+<col style="width: 8%" />
+<col style="width: 7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th><strong>Mệnh đề</strong></th>
+<th><strong>Đúng</strong></th>
+<th><strong>Sai</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>(a)</strong></td>
+<td><img src="media/image529.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(b)</strong></td>
+<td><img src="media/image530.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><strong>(c)</strong></td>
+<td><img src="media/image531.wmf" /> chia hết cho 2.</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(d)</strong></td>
+<td><img src="media/image532.wmf" /> không chia hết cho 3.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><em><strong>(a)</strong></em> <img
+src="media/image529.wmf" /><em>.</em></p>
+<blockquote>
+<p>Ta chọn <img src="media/image533.wmf" /> thì <img
+src="media/image534.wmf" /> là sai.</p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(b)</strong></em> <img
+src="media/image530.wmf" /><em>.</em></p>
+<blockquote>
+<p>Ta chọn <img src="media/image535.wmf" /> thì <img
+src="media/image536.wmf" /> nên <img src="media/image537.wmf" />
+(đúng).</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(c)</strong></em> <img src="media/image531.wmf" />
+<em>chia hết cho 2.</em></p>
+<blockquote>
+<p>Thật vậy: <img src="media/image538.wmf" /></p>
+<p>Trong đó <img src="media/image539.wmf" /> là tích của hai số nguyên
+liên tiếp nên chia hết cho 2, vì vậy <img src="media/image540.wmf" />
+cũng chia hết cho 2.</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(d)</strong></em> <img src="media/image532.wmf" />
+<em>không chia hết cho 3.</em></p>
+<blockquote>
+<p>Ta cho <img src="media/image541.wmf" /> thì <img
+src="media/image542.wmf" /> chia hết cho 3.</p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<ol start="41" type="1">
+<li><p>Cho mệnh đề chứa biến <img src="media/image543.wmf" />, xét tính
+đúng sai của các mệnh đề sau:</p></li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 5%" />
+<col style="width: 77%" />
+<col style="width: 8%" />
+<col style="width: 7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th><strong>Mệnh đề</strong></th>
+<th><strong>Đúng</strong></th>
+<th><strong>Sai</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>(a)</strong></td>
+<td><img src="media/image544.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(b)</strong></td>
+<td><img src="media/image545.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><strong>(c)</strong></td>
+<td><img src="media/image546.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(d)</strong></td>
+<td><img src="media/image547.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><em><strong>(a)</strong></em> <img
+src="media/image544.wmf" /><em>.</em></p>
+<blockquote>
+<p>Ta có <img src="media/image548.wmf" /> "<img
+src="media/image549.wmf" />" đây là mệnh đề sai.</p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(b)</strong></em> <img
+src="media/image545.wmf" /><em>.</em></p>
+<blockquote>
+<p>Ta có <img src="media/image550.wmf" /> " <img
+src="media/image551.wmf" /> " đây là mệnh đề đúng.</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(c)</strong></em> <img
+src="media/image546.wmf" /><em>.</em></p>
+<blockquote>
+<p>Ta có <img src="media/image552.wmf" /> là mệnh đề sai vì <img
+src="media/image553.wmf" /> là mệnh đề sai.</p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(d)</strong></em> <img
+src="media/image547.wmf" /><em>.</em></p>
+<blockquote>
+<p>Ta có <img src="media/image554.wmf" /> là mệnh đề sai vì <img
+src="media/image555.wmf" /> là mệnh đề sai.</p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<ol start="42" type="1">
+<li><p>Xét tính đúng, sai của các mệnh đề sau:</p></li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 5%" />
+<col style="width: 77%" />
+<col style="width: 8%" />
+<col style="width: 7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th><strong>Mệnh đề</strong></th>
+<th><strong>Đúng</strong></th>
+<th><strong>Sai</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>(a)</strong></td>
+<td><img src="media/image556.wmf" /> không phải là một số vô tỉ.</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(b)</strong></td>
+<td>Phương trình <img src="media/image557.wmf" /> vô nghiệm.</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><strong>(c)</strong></td>
+<td>Hàm số bậc hai <img src="media/image558.wmf" /> có đồ thị là parabol
+với tọa độ đỉnh là <img src="media/image559.wmf" />.</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(d)</strong></td>
+<td><img src="media/image560.wmf" /> và <img src="media/image561.wmf" />
+là hai số nghịch đảo của nhau.</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><em><strong>(a)</strong></em> <img src="media/image556.wmf" />
+<em>không phải là một số vô tỉ.</em></p>
+<blockquote>
+<p>Vì <img src="media/image562.wmf" /> là một số vô tỉ.</p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(b)</strong> Phương trình</em> <img
+src="media/image557.wmf" /> <em>vô nghiệm.</em></p>
+<blockquote>
+<p>Vì <img src="media/image563.wmf" />.</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(c)</strong> Hàm số bậc hai</em> <img
+src="media/image558.wmf" /> <em>có đồ thị là parabol với tọa độ đỉnh
+là</em> <img src="media/image564.wmf" /><em>.</em></p>
+<blockquote>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(d)</strong></em> <img src="media/image560.wmf" />
+<em>và</em> <img src="media/image561.wmf" /> <em>là hai số nghịch đảo
+của nhau.</em></p>
+<blockquote>
+<p>Vì <img src="media/image565.wmf" />.</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<ol start="43" type="1">
+<li><p>Xét tính đúng sai của các mệnh đề sau:</p></li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 5%" />
+<col style="width: 77%" />
+<col style="width: 8%" />
+<col style="width: 7%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th><strong>Mệnh đề</strong></th>
+<th><strong>Đúng</strong></th>
+<th><strong>Sai</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>(a)</strong></td>
+<td><img src="media/image566.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(b)</strong></td>
+<td><img src="media/image567.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><strong>(c)</strong></td>
+<td><img src="media/image568.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td><strong>(d)</strong></td>
+<td><img src="media/image569.wmf" /></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+</blockquote>
+<p><em><strong>(a)</strong></em> <img
+src="media/image566.wmf" /><em><strong>.</strong></em></p>
+<blockquote>
+<p>Với <img src="media/image570.wmf" />: " <img
+src="media/image571.wmf" /> " là mệnh đề sai.</p>
+<p><strong>» Chọn</strong> SAI.</p>
+</blockquote>
+<p><em><strong>(b)</strong></em> <img
+src="media/image567.wmf" /><em><strong>.</strong></em></p>
+<blockquote>
+<p>Vì "<img src="media/image572.wmf" />" là mệnh đề đúng.</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(c)</strong></em> <img
+src="media/image568.wmf" /><em><strong>.</strong></em></p>
+<blockquote>
+<p>Vì <img src="media/image573.wmf" /> đúng <img
+src="media/image574.wmf" />.</p>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<p><em><strong>(d)</strong></em> <img
+src="media/image569.wmf" /><em><strong>.</strong></em></p>
+<blockquote>
+<p><strong>» Chọn</strong> ĐÚNG.</p>
+</blockquote>
+<ol start="3" type="A">
+<li><p><em><strong>Câu hỏi – Trả lời ngắn</strong></em></p></li>
+</ol>
+<ol start="44" type="1">
+<li><p>Có bao nhiêu giá trị của <img src="media/image314.wmf" /> để
+"<img src="media/image315.wmf" />" là mệnh đề đúng?</p></li>
+</ol>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+<p><em><strong>Trả lời: 1</strong></em></p>
+<p><img src="media/image575.wmf" /></p>
+<p>Do <img src="media/image576.wmf" /> thỏa, vậy chỉ có 1 giá trị làm
+cho "<img src="media/image315.wmf" />" đúng</p>
+</blockquote>
+<ol start="45" type="1">
+<li><p>Có bao nhiêu giá trị của <img src="media/image314.wmf" /> để <img
+src="media/image577.wmf" /> là mệnh đề đúng?</p></li>
+</ol>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+<p><em><strong>Trả lời: 1</strong></em></p>
+<p><img src="media/image578.wmf" /></p>
+<p>Do <img src="media/image579.wmf" /> thỏa, vậy chỉ có 1 giá trị làm
+cho <img src="media/image577.wmf" /> đúng</p>
+</blockquote>
+<ol start="46" type="1">
+<li><p>Cho các phát biểu sau: <img src="media/image580.wmf" />; <img
+src="media/image581.wmf" />. Có bao nhiêu giá trị nguyên của <img
+src="media/image314.wmf" /> để <img src="media/image582.wmf" /> và <img
+src="media/image583.wmf" /> trở thành mệnh đề đúng?</p></li>
+</ol>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+<p><em><strong>Trả lời: 0</strong></em></p>
+<p>Ta có: <img src="media/image584.wmf" /></p>
+<p>Mà <img src="media/image585.wmf" /> nên không có giá trị nào của <img
+src="media/image586.wmf" /> làm cho (2) đúng</p>
+<p><img src="media/image587.wmf" />Không có số nguyên <img
+src="media/image588.wmf" /> nào để cả <img src="media/image582.wmf" />
+và <img src="media/image583.wmf" /> trở thành các mệnh đề đúng</p>
+</blockquote>
+<ol start="47" type="1">
+<li><p>Cho mệnh đề <img src="media/image306.wmf" /> với <img
+src="media/image307.wmf" /> là số thực cho trước. Có giá trị nguyên của
+tham số <img src="media/image589.wmf" /> để mệnh đề đã cho là mệnh đề
+đúng thì bao nhiêu</p></li>
+</ol>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+<p><em><strong>Trả lời: 7</strong></em></p>
+<p>Vì <img src="media/image590.wmf" />.</p>
+<p>Khi đó kết hợp <img src="media/image589.wmf" /><img
+src="media/image591.wmf" /> có 7 giá trị nguyên của tham số <img
+src="media/image592.wmf" /></p>
+</blockquote>
+<ol start="48" type="1">
+<li><p>Cho <img src="media/image593.wmf" /> với <img
+src="media/image594.wmf" /> là số tự nhiên. Có bao nhiêu giá trị của
+<img src="media/image594.wmf" /> để <img src="media/image595.wmf" /> là
+số nguyên</p></li>
+</ol>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+<p><em><strong>Trả lời: 2</strong></em></p>
+<p>Ta có: <img src="media/image596.wmf" /></p>
+<p>Suy ra: <img src="media/image597.wmf" /> là ước của <img
+src="media/image598.wmf" /><img src="media/image599.wmf" />.</p>
+<p>Vậy có 2 giá trị <img src="media/image594.wmf" /></p>
+</blockquote>
+<ol start="49" type="1">
+<li><p>Có bao nhiêu cặp số <img src="media/image600.wmf" /> để cả ba
+mệnh đề <img src="media/image601.wmf" />, <img
+src="media/image602.wmf" />, <img src="media/image603.wmf" /> sau đây
+đều đúng: <img src="media/image604.wmf" />: “<img
+src="media/image605.wmf" />”,<img src="media/image606.wmf" />: “<img
+src="media/image607.wmf" />”,<img src="media/image608.wmf" />: “<img
+src="media/image609.wmf" />”.</p></li>
+</ol>
+<blockquote>
+<p><em><strong>Lời giải</strong></em></p>
+<p><em><strong>Trả lời: 2</strong></em></p>
+<p>Giả sử <img src="media/image610.wmf" /> đúng, suy ra <img
+src="media/image611.wmf" />.</p>
+<p>Thay vào <img src="media/image612.wmf" /> ta được <img
+src="media/image613.wmf" /> <img src="media/image614.wmf" /></p>
+<p>Lại có <img src="media/image615.wmf" /> (2)</p>
+<p>Từ (1) và (2), suy ra <img src="media/image616.wmf" /></p>
+<p>Mà <img src="media/image617.wmf" /> đúng nên <img
+src="media/image618.wmf" /> hoặc <img src="media/image619.wmf" /> hoặc
+<img src="media/image620.wmf" /></p>
+<p>Thử trực tiếp ta thấy chỉ <img src="media/image621.wmf" /> thỏa.</p>
+<p>Vậy ta tìm được hai cặp số thỏa mãn là: <img
+src="media/image622.wmf" />,<img src="media/image623.wmf" />.</p>
+</blockquote>
+<p>-------------------- Hết --------------------</p>
+</body>
+</html>

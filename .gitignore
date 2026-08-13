@@ -1,0 +1,10 @@
+/attendance.db
+/attendance.db-shm
+/attendance.db-wal
+/token.json
+/credentials.json
+/config/google-oauth.json
+/config/gemini-key.txt
+/key.txt
+/meet-attendance
+/meet-attendance.exe
