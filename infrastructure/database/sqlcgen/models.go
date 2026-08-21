@@ -9,28 +9,70 @@ import (
 	"time"
 )
 
+type Assignment struct {
+	ID             int64     `db:"id" json:"id"`
+	Title          string    `db:"title" json:"title"`
+	AssignmentType string    `db:"assignment_type" json:"assignment_type"`
+	Status         string    `db:"status" json:"status"`
+	AssignedAt     time.Time `db:"assigned_at" json:"assigned_at"`
+	AssigneeID     int64     `db:"assignee_id" json:"assignee_id"`
+	TargetPageID   string    `db:"target_page_id" json:"target_page_id"`
+	ItemsJson      string    `db:"items_json" json:"items_json"`
+}
+
+type LessonDraft struct {
+	ID             int64          `db:"id" json:"id"`
+	SourceUrl      string         `db:"source_url" json:"source_url"`
+	CustomPrompt   string         `db:"custom_prompt" json:"custom_prompt"`
+	Model          string         `db:"model" json:"model"`
+	Status         string         `db:"status" json:"status"`
+	ErrorMessage   string         `db:"error_message" json:"error_message"`
+	Title          string         `db:"title" json:"title"`
+	TeacherContent string         `db:"teacher_content" json:"teacher_content"`
+	StudentContent string         `db:"student_content" json:"student_content"`
+	LessonDataJson sql.NullString `db:"lesson_data_json" json:"lesson_data_json"`
+	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt      sql.NullTime   `db:"updated_at" json:"updated_at"`
+}
+
 type Meeting struct {
-	ID               int64        `db:"id" json:"id"`
-	GoogleRecordName string       `db:"google_record_name" json:"google_record_name"`
-	GoogleSpaceName  string       `db:"google_space_name" json:"google_space_name"`
-	StartedAt        time.Time    `db:"started_at" json:"started_at"`
-	EndedAt          sql.NullTime `db:"ended_at" json:"ended_at"`
+	ID              int64        `db:"id" json:"id"`
+	Class           string       `db:"class" json:"class"`
+	Code            string       `db:"code" json:"code"`
+	StartedAt       time.Time    `db:"started_at" json:"started_at"`
+	EndedAt         sql.NullTime `db:"ended_at" json:"ended_at"`
+	DurationMinutes int64        `db:"duration_minutes" json:"duration_minutes"`
+}
+
+type Mistake struct {
+	ID           int64     `db:"id" json:"id"`
+	StudentID    int64     `db:"student_id" json:"student_id"`
+	AssignmentID int64     `db:"assignment_id" json:"assignment_id"`
+	Topic        string    `db:"topic" json:"topic"`
+	ErrorReason  string    `db:"error_reason" json:"error_reason"`
+	IsResolved   int64     `db:"is_resolved" json:"is_resolved"`
+	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 }
 
 type Participant struct {
-	ID                    int64        `db:"id" json:"id"`
-	MeetingID             int64        `db:"meeting_id" json:"meeting_id"`
-	GoogleParticipantName string       `db:"google_participant_name" json:"google_participant_name"`
-	GoogleUserName        string       `db:"google_user_name" json:"google_user_name"`
-	DisplayName           string       `db:"display_name" json:"display_name"`
-	JoinedAt              time.Time    `db:"joined_at" json:"joined_at"`
-	LeftAt                sql.NullTime `db:"left_at" json:"left_at"`
-	DurationMinutes       int64        `db:"duration_minutes" json:"duration_minutes"`
+	ID              int64        `db:"id" json:"id"`
+	MeetingID       int64        `db:"meeting_id" json:"meeting_id"`
+	Name            string       `db:"name" json:"name"`
+	FirstJoinedAt   time.Time    `db:"first_joined_at" json:"first_joined_at"`
+	LastLeftAt      sql.NullTime `db:"last_left_at" json:"last_left_at"`
+	DurationMinutes int64        `db:"duration_minutes" json:"duration_minutes"`
 }
 
 type Student struct {
-	ID              int64  `db:"id" json:"id"`
-	Name            string `db:"name" json:"name"`
-	GoogleSpaceName string `db:"google_space_name" json:"google_space_name"`
-	CycleStartDay   int64  `db:"cycle_start_day" json:"cycle_start_day"`
+	ID                 int64          `db:"id" json:"id"`
+	Class              string         `db:"class" json:"class"`
+	Name               string         `db:"name" json:"name"`
+	StudentWorkspaceID sql.NullString `db:"student_workspace_id" json:"student_workspace_id"`
+	TeacherWorkspaceID sql.NullString `db:"teacher_workspace_id" json:"teacher_workspace_id"`
+	CycleStartDay      int64          `db:"cycle_start_day" json:"cycle_start_day"`
+}
+
+type SystemSetting struct {
+	Key   string `db:"key" json:"key"`
+	Value string `db:"value" json:"value"`
 }

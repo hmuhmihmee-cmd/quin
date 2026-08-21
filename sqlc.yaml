@@ -10,4 +10,3 @@ sql:
         sql_package: database/sql
         emit_db_tags: true
         emit_json_tags: true
-

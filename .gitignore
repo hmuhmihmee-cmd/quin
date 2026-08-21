@@ -8,3 +8,10 @@
 /key.txt
 /meet-attendance
 /meet-attendance.exe
+# Bỏ qua thư mục build / binary
+build/
+bin/
+*.exe
+
+# Bỏ qua file config chứa secret
+config/microsoft-oauth.json

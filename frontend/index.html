@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lớp học 1–1</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="shell">
+    <!-- SIDEBAR -->
+    <aside class="side">
+      <div class="brand">
+        <h2>Lớp học 1–1</h2>
+        <small>Sổ làm việc giáo viên</small>
+      </div>
+      <section class="service-connections" aria-label="Liên kết tài khoản">
+        <div class="service-connections-title">LIÊN KẾT TÀI KHOẢN</div>
+        <p class="service-connections-help">Chọn dịch vụ để đăng nhập hoặc đổi tài khoản.</p>
+
+        <div class="service-connection service-google">
+          <div class="service-connection-info">
+            <strong>Google Meet</strong>
+            <span id="google-status-indicator" class="service-status"><span class="status-dot" style="color:#94a3b8;">○</span> Đang kiểm tra kết nối...</span>
+          </div>
+          <button class="service-connect-btn" type="button" onclick="handleConnectGoogle()">Kết nối Google Meet</button>
+        </div>
+
+        <div class="service-connection service-onenote">
+          <div class="service-connection-info">
+            <strong>Microsoft OneNote</strong>
+            <span id="onenote-status-indicator" class="service-status"><span class="status-dot" style="color:#94a3b8;">○</span> Đang kiểm tra kết nối...</span>
+          </div>
+          <button class="service-connect-btn" type="button" onclick="handleConnectOneNote()">Kết nối OneNote</button>
+        </div>
+      </section>
+      <nav class="nav">
+        <button class="nav-item active" data-view="dashboard" onclick="navigate('dashboard')">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+          Sổ buổi học
+        </button>
+        <button class="nav-item" data-view="lessons" onclick="navigate('lessons')">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+          Soạn bài với AI
+        </button>
+        <button class="nav-item" data-view="grading" onclick="navigate('grading')">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Chấm bài
+        </button>
+      </nav>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="page">
+      <!-- TOAST NOTIFICATION -->
+      <div id="toast" class="toast hidden"></div>
+
+      <!-- VIEW 1: DASHBOARD (SỔ BUỔI HỌC) -->
+      <section id="view-dashboard" class="view-panel active">
+        <header class="head">
+          <div>
+            <span class="eyebrow">Quản lý lớp</span>
+            <h1>Sổ buổi học</h1>
+          </div>
+          <button class="btn btn-primary" id="btn-sync" onclick="handleSyncMeet()">
+            <svg class="spin-icon hidden" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+            <span>Đồng bộ Google Meet</span>
+          </button>
+        </header>
+
+        <!-- FILTERS -->
+        <div class="card filter-card">
+          <div class="filter-grid">
+            <div class="field">
+              <label>Tìm học sinh</label>
+              <input type="text" id="filter-search" placeholder="Nhập tên học sinh..." onkeydown="if(event.key==='Enter') loadDashboard()">
+            </div>
+            <div class="field">
+              <label>Tháng</label>
+              <input type="month" id="filter-month" onchange="onMonthChange()">
+            </div>
+            <div class="field">
+              <label>Từ ngày</label>
+              <input type="date" id="filter-from">
+            </div>
+            <div class="field">
+              <label>Đến ngày</label>
+              <input type="date" id="filter-to">
+            </div>
+            <div class="field">
+              <label>Buổi tối thiểu</label>
+              <div class="input-unit">
+                <input type="number" id="filter-min-duration" value="30" min="0">
+                <span>phút</span>
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="loadDashboard()" style="height: 38px; white-space: nowrap;">
+              Xem thống kê
+            </button>
+          </div>
+        </div>
+
+        <div id="dashboard-status" class="status-banner status-info">
+          Sẵn sàng xem thống kê. Chọn bộ lọc và bấm "Xem thống kê".
+        </div>
+
+        <!-- STATS -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span>Học sinh</span>
+            <strong id="stat-students">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Tổng số buổi hợp lệ</span>
+            <strong id="stat-sessions">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Tổng thời lượng dạy</span>
+            <strong id="stat-duration">0 giờ 0 phút</strong>
+          </div>
+        </div>
+
+        <!-- TABLE -->
+        <div class="card table-card">
+          <div class="card-header">
+            <h3>Danh sách học sinh</h3>
+            <span id="student-count-badge">0 học sinh</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Học sinh</th>
+                  <th>Mã Space (Lớp)</th>
+                  <th>Ngày bắt đầu chu kỳ</th>
+                  <th>Số buổi</th>
+                  <th>Tổng thời lượng</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="student-table-body">
+                <!-- Data rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: STUDENT DETAIL (CHI TIẾT HỌC SINH) -->
+      <section id="view-student-detail" class="view-panel">
+        <a class="back-link" href="javascript:void(0)" onclick="navigate('dashboard')">← Quay lại danh sách</a>
+        <header class="head">
+          <div>
+            <span class="eyebrow">Chi tiết học sinh</span>
+            <h1 id="detail-name">Học sinh</h1>
+            <p id="detail-space" class="text-muted">Space ID: ...</p>
+          </div>
+        </header>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span>Số buổi học</span>
+            <strong id="detail-stat-sessions">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Tổng thời gian học</span>
+            <strong id="detail-stat-duration">0 phút</strong>
+          </div>
+        </div>
+
+        <!-- FILTERS FOR STUDENT DETAIL -->
+        <div class="card filter-card">
+          <div class="filter-grid">
+            <div class="field">
+              <label>Từ ngày</label>
+              <input type="date" id="detail-filter-from">
+            </div>
+            <div class="field">
+              <label>Đến ngày</label>
+              <input type="date" id="detail-filter-to">
+            </div>
+            <div class="field">
+              <label>Buổi tối thiểu</label>
+              <div class="input-unit">
+                <input type="number" id="detail-filter-min-duration" value="0" min="0">
+                <span>phút</span>
+              </div>
+            </div>
+            <button class="btn btn-primary" onclick="reloadStudentDetail()" style="height: 38px; white-space: nowrap;">
+              Cập nhật
+            </button>
+          </div>
+        </div>
+
+        <div class="detail-layout">
+          <!-- SESSIONS LIST -->
+          <div class="card table-card">
+            <div class="card-header">
+              <h3>Các buổi học</h3>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Thời gian học</th>
+                    <th>Thời lượng</th>
+                    <th>Người tham gia</th>
+                  </tr>
+                </thead>
+                <tbody id="meetings-table-body">
+                  <!-- Meetings rendered here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- EDIT STUDENT CARD -->
+          <div class="card form-card">
+            <h3>Cài đặt học sinh</h3>
+            <div class="field">
+              <label>Tên học sinh</label>
+              <input type="text" id="edit-student-name">
+            </div>
+            <div class="field">
+              <label>Google Space ID</label>
+              <input type="text" id="edit-student-space" readonly class="input-readonly">
+            </div>
+            <div class="field">
+              <label>Ngày bắt đầu chu kỳ (1 - 31)</label>
+              <input type="number" id="edit-student-cycle" min="1" max="31">
+            </div>
+            <button class="btn btn-primary" onclick="handleUpdateStudent()">Lưu thay đổi</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: AI LESSONS (TẠO BÀI GIẢNG & LỊCH SỬ PROMPT) -->
+      <section id="view-lessons" class="view-panel">
+        <header class="head">
+          <div>
+            <span class="eyebrow">Trợ lý AI</span>
+            <h1>Soạn bài từ Video YouTube</h1>
+          </div>
+        </header>
+
+        <!-- FORM TẠO BÀI -->
+        <div class="card form-panel">
+          <h3>Tạo bài giảng mới</h3>
+          <p class="text-muted">AI sẽ xem video YouTube, tạo giáo án chi tiết cho giáo viên và phiếu bài tập đục lỗ cho học sinh.</p>
+          
+          <div class="form-grid">
+            <div class="field">
+              <label>Model AI</label>
+              <select id="lesson-model-select">
+                <option value="gemini-3.7-flash" selected>Gemini 3.7 Flash (Mặc định)</option>
+              </select>
+            </div>
+            <div class="field" style="grid-column: 1 / -1;">
+              <label>Đường dẫn Video YouTube <span class="req">*</span></label>
+              <input type="url" id="lesson-url" placeholder="https://www.youtube.com/watch?v=..." required>
+            </div>
+            <div class="field" style="grid-column: 1 / -1;">
+              <label>Yêu cầu tùy chỉnh (Prompt riêng)</label>
+              <textarea id="lesson-prompt" placeholder="Ví dụ: Tập trung vào giải các bài toán hình học không gian, giải thích dễ hiểu cho học sinh lớp 11..."></textarea>
+            </div>
+          </div>
+          
+          <button class="btn btn-primary" id="btn-create-lesson" onclick="handleCreateLesson()">
+            <span>Bắt đầu tạo bài giảng</span>
+          </button>
+        </div>
+
+        <!-- HISTORY / PROMPTS & DRAFTS TABLE -->
+        <div class="card table-card" style="margin-top: 24px;">
+          <div class="card-header">
+            <h3>Lịch sử tạo bài & Trạng thái Prompt</h3>
+            <span id="drafts-count-badge">0 bài</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 28%;">Bài giảng / Video</th>
+                  <th style="width: 25%;">Yêu cầu (Prompt)</th>
+                  <th style="width: 12%;">Model</th>
+                  <th style="width: 15%;">Thời gian</th>
+                  <th style="width: 10%;">Trạng thái</th>
+                  <th style="width: 10%; text-align: right;">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="drafts-table-body">
+                <!-- Render drafts list -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 4: LESSON EDITOR (CHỈNH SỬA & XUẤT PDF) -->
+      <section id="view-lesson-editor" class="view-panel">
+        <a class="back-link" href="javascript:void(0)" onclick="navigate('lessons')">← Danh sách bài giảng</a>
+        <header class="head">
+          <div>
+            <span class="eyebrow">Chỉnh sửa tài liệu</span>
+            <input type="text" id="editor-title" class="title-input" placeholder="Tiêu đề bài giảng...">
+          </div>
+          <div class="action-buttons">
+            <button class="btn btn-secondary" onclick="handleSaveDraft()">Lưu bản nháp</button>
+            <button class="btn btn-onenote" onclick="openPushOneNoteDialog()">Đẩy lên OneNote (GV & HS)</button>
+            <button class="btn btn-primary" onclick="handleExportPDF()">Xuất 2 file PDF</button>
+          </div>
+        </header>
+
+        <div class="card structured-editor">
+          <div class="field">
+            <label>Tổng quan bài học</label>
+            <textarea id="editor-overview" placeholder="Mục tiêu và nội dung chính của bài học"></textarea>
+          </div>
+          <div class="editor-section-head"><h3>Nội dung bài giảng</h3><button class="btn btn-secondary" onclick="addLessonSection()">+ Thêm mục</button></div>
+          <div id="lesson-sections-editor"></div>
+          <div class="editor-section-head"><h3>Bài tập</h3><button class="btn btn-secondary" onclick="addLessonExercise()">+ Thêm câu</button></div>
+          <div id="lesson-exercises-editor"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 5: CHẤM BÀI -->
+      <section id="view-grading" class="view-panel">
+        <header class="head"><div><span class="eyebrow">OneNote & AI</span><h1>Chấm bài</h1><p class="text-muted">Tìm bài học sinh, chọn câu cần chấm và xem lỗi sai.</p></div></header>
+        <div class="tab-header">
+          <button class="tab-btn active" id="grading-tab-assignments" onclick="switchGradingTab('assignments')">Bài đã giao</button>
+          <button class="tab-btn" id="grading-tab-mistakes" onclick="switchGradingTab('mistakes')">Lỗi sai học sinh</button>
+        </div>
+        <div id="grading-assignments-panel">
+          <div class="card grading-filter">
+            <div class="field"><label>Tìm theo học sinh hoặc tên bài</label><input id="grading-search" placeholder="Nhập tên để tìm nhanh..." oninput="scheduleGradingSearch()"></div>
+            <button class="btn btn-secondary" onclick="loadGradingPages()">Làm mới</button>
+          </div>
+          <div class="card table-card" style="margin-top:16px"><div class="card-header"><h3>Bài tập đã giao</h3><span id="grading-count">0 bài</span></div><div class="table-wrap"><table><thead><tr><th>Học sinh & bài</th><th>Ngày giao</th><th>Kết quả</th><th></th></tr></thead><tbody id="grading-pages-body"></tbody></table></div></div>
+        </div>
+        <div id="grading-mistakes-panel" class="hidden"><div id="mistake-groups"></div></div>
+      </section>
+
+      <!-- VIEW 6: CHI TIẾT CHẤM -->
+      <section id="view-grading-detail" class="view-panel">
+        <a class="back-link" href="javascript:void(0)" onclick="navigate('grading')">← Danh sách bài cần chấm</a>
+        <header class="head"><div><span class="eyebrow">Chấm bằng AI</span><h1 id="grading-detail-title">Bài tập</h1><p id="grading-detail-student" class="text-muted"></p></div></header>
+        <div class="card grading-controls">
+          <div class="field"><label>Model chấm bài</label><select id="grading-model"></select></div>
+          <div class="field"><label>Yêu cầu chấm thêm (không bắt buộc)</label><textarea id="grading-prompt" placeholder="Ví dụ: nhận xét ngắn, ưu tiên chỉ ra bước sai..."></textarea></div>
+        </div>
+        <div class="card" style="margin-top:16px"><div class="editor-section-head"><label class="check-label"><input type="checkbox" id="grade-select-all" onchange="toggleGradeAll(this.checked)" checked> Chọn tất cả câu</label><div class="action-buttons"><button class="btn btn-secondary hidden" id="btn-push-feedback" onclick="handlePushFeedback()">Đẩy lại nhận xét</button><button class="btn btn-primary" id="btn-grade" onclick="handleGradeAssignment()">Chấm các câu đã chọn</button></div></div><div id="grading-items"></div></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL XEM CHI TIẾT LỖI TỪ AI -->
+  <div id="error-modal" class="modal-overlay hidden" onclick="closeErrorModal()">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>Chi tiết lỗi xử lý AI</h3>
+        <button class="modal-close" onclick="closeErrorModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom: 8px;">Dưới đây là toàn bộ thông báo lỗi phản hồi từ hệ thống:</p>
+        <pre id="error-modal-text" class="error-log-box">Không có dữ liệu</pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="copyErrorLog()">Sao chép lỗi</button>
+        <button class="btn btn-primary" onclick="closeErrorModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ĐẨY BÀI LÊN ONENOTE -->
+  <div id="onenote-modal" class="modal-overlay hidden" onclick="closeOneNoteModal()">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 style="color: #6b21a8;">Đẩy bài giảng lên Microsoft OneNote</h3>
+        <button class="modal-close" onclick="closeOneNoteModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom: 14px;">Hệ thống tự tạo hoặc tái sử dụng hai sổ Giáo viên/Học sinh của học sinh đã chọn, sau đó luôn tạo Trang mới trong Chương:</p>
+        
+        <div class="field" style="margin-bottom: 12px;"><label>1. Học sinh nhận bài</label><select id="on-student-id" onchange="refreshOneNotePublishTargets()"></select></div>
+        <div class="field" style="margin-bottom: 12px;">
+          <label>2. Chương trong vở Học sinh</label>
+          <small id="on-student-workspace-status" class="text-muted"></small>
+          <select id="on-student-chapter-select" onchange="toggleOneNoteChapterInput('student')"></select>
+          <input type="text" id="on-student-chapter-name" placeholder="Nhập tên chương mới của học sinh..." style="margin-top:8px;">
+        </div>
+
+        <div class="field" style="margin-bottom: 12px;">
+          <label>3. Chương trong vở Giáo viên</label>
+          <small id="on-teacher-workspace-status" class="text-muted"></small>
+          <select id="on-teacher-chapter-select" onchange="toggleOneNoteChapterInput('teacher')"></select>
+          <input type="text" id="on-teacher-chapter-name" placeholder="Nhập tên chương mới của giáo viên..." style="margin-top:8px;">
+        </div>
+        
+        <div class="field">
+          <label>4. Tiêu đề buổi học trên trang OneNote</label>
+          <input type="text" id="on-page-title" placeholder="VD: Buổi 1: Đường tròn lượng giác">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeOneNoteModal()">Hủy</button>
+        <button class="btn btn-onenote" id="btn-do-push-onenote" onclick="handleDoPushOneNote()">Bắt đầu đẩy bài</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="remediation-modal" class="modal-overlay hidden" onclick="closeRemediationModal()">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header"><h3 style="color:#15803d">Tạo bài tập từ lỗi sai</h3><button class="modal-close" onclick="closeRemediationModal()">✕</button></div>
+      <div class="modal-body">
+        <p id="remediation-context" class="mistake-context"></p>
+        <div class="count-grid"><div class="field"><label>Số câu trắc nghiệm</label><input type="number" id="remediation-mc" min="0" max="20" value="3"></div><div class="field"><label>Số câu tự luận</label><input type="number" id="remediation-essay" min="0" max="20" value="2"></div></div>
+        <div class="field" style="margin-top:12px"><label>Model AI</label><select id="remediation-model"></select></div>
+        <div class="field" style="margin-top:12px"><label>Yêu cầu thêm (không bắt buộc)</label><textarea id="remediation-prompt" placeholder="Ví dụ: tăng dần độ khó, phù hợp lớp 11..."></textarea></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" onclick="closeRemediationModal()">Hủy</button><button class="btn btn-primary" id="btn-remediation" onclick="handleGenerateRemediation()">Tạo và giao bài</button></div>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>

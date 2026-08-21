@@ -1,0 +1,26 @@
+package domain
+
+import "time"
+
+type Meeting struct {
+	ID           string        `json:"id"`
+	Class        string        `json:"class"`
+	StartedAt    time.Time     `json:"started_at"`
+	EndedAt      time.Time     `json:"ended_at"`
+	Participants []Participant `json:"participants"`
+}
+
+type Participant struct {
+	Name          string    `json:"name"`
+	FirstJoinedAt time.Time `json:"first_joined_at"`
+	LastLeftAt    time.Time `json:"last_left_at"`
+	Duration      int       `json:"duration"`
+}
+type Student struct {
+	ID                 int     `json:"id"`
+	Name               string  `json:"name"`
+	Class              string  `json:"class"`
+	CycleStartDay      int     `json:"cycle_start_day"`
+	StudentWorkspaceID *string `json:"student_workspace_id,omitempty"`
+	TeacherWorkspaceID *string `json:"teacher_workspace_id,omitempty"`
+}

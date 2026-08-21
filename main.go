@@ -1,117 +1,111 @@
 package main
 
 import (
-	"context"
-
-	_ "embed"
-	"errors"
+	"embed"
+	"encoding/json"
 	"log"
+	"os"
+	"path/filepath"
+
 	"meet-attendance-clean/application"
 	"meet-attendance-clean/config"
 	"meet-attendance-clean/infrastructure/database"
 	"meet-attendance-clean/infrastructure/gemini"
 	"meet-attendance-clean/infrastructure/googlemeet"
-	pdfadapter "meet-attendance-clean/infrastructure/pdf"
-	"meet-attendance-clean/infrastructure/web"
-	"meet-attendance-clean/infrastructure/web/handlers"
-	"net/http"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"strings"
-	"syscall"
-	"time"
+	"meet-attendance-clean/infrastructure/onenote"
+	"meet-attendance-clean/infrastructure/pdf"
+
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
+
+//go:embed frontend
+var assets embed.FS
 
 //go:embed config/google-oauth.json
 var embeddedGoogleCredentials []byte
+
 //go:embed config/gemini-key.txt
 var embeddedGeminiKey []byte
+
+//go:embed config/microsoft-oauth.json
+var embeddedMicrosoftCredentials []byte
+
 func main() {
-	if err := run(); err != nil {
+	cfg, err := config.NewConfig()
+	if err != nil {
+		log.Printf("Cảnh báo config: %v", err)
+	}
+
+	db, err := database.Open("./attendance.db")
+	if err != nil {
+		log.Fatalf("Lỗi mở SQLite: %v", err)
+	}
+	defer db.Close()
+
+	meetClient, _ := googlemeet.New(embeddedGoogleCredentials, "token.json", cfg.GoogleRedirectURL)
+	geminiClient := gemini.New(string(embeddedGeminiKey), cfg.GeminiModel)
+	formatter := pdf.NewFormatter()
+	renderer := pdf.NewRenderer()
+	// Đọc cấu hình Microsoft OAuth
+	var msCfg struct {
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+		RedirectURL  string `json:"redirect_url"`
+	}
+	_ = json.Unmarshal(embeddedMicrosoftCredentials, &msCfg)
+	if msCfg.RedirectURL == "" {
+		msCfg.RedirectURL = "http://localhost:9000/oauth/microsoft/callback"
+	}
+	oneNoteClient := onenote.New(
+		msCfg.ClientID,
+		msCfg.ClientSecret,
+		msCfg.RedirectURL,
+		filepath.Join("", "token_microsoft.json"),
+	)
+	// 2. Khởi tạo Application UseCases
+	meetCmd := application.NewMeetCommand(db, meetClient, db, db)
+	meetQuery := application.NewMeetQuery(db)
+	lessonCmd := application.NewLessonCommand(db, geminiClient, formatter, renderer)
+	lessonQuery := application.NewLessonQuery(db, geminiClient)
+	// HẠ TẦNG MỚI: nối các adapter Assignment/OneNote/Gemini vào application.
+	assignmentCmd := application.NewAssignmentCommand(db, db, db, db, oneNoteClient, geminiClient)
+	assignmentQuery := application.NewAssignmentQuery(db)
+	workspaceCmd := application.NewWorkspaceCommand(db, oneNoteClient, db, db)
+	workspaceQuery := application.NewWorkspaceQuery(oneNoteClient)
+	// 3. Khởi tạo Wails Bridge App
+	app := NewApp(meetCmd, meetQuery, lessonCmd, lessonQuery, geminiClient, workspaceCmd, workspaceQuery, assignmentCmd, assignmentQuery, oneNoteClient, meetClient)
+
+	// 4. Khởi chạy Desktop App
+	err = wails.Run(&options.App{
+		Title:     "Lớp học 1–1 & Trợ lý Soạn bài",
+		Width:     1280,
+		Height:    820,
+		MinWidth:  1024,
+		MinHeight: 700,
+		AssetServer: &assetserver.Options{
+			Assets: assets,
+		},
+		OnStartup: app.startup,
+		Bind: []any{
+			app,
+		},
+	})
+
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run() error {
-	cfg,err:= config.NewConfig()
-	if err!=nil{
-		return err
-	}
-	dataDir, err := applicationDirectory()
+func appDataDirectory() (string, error) {
+	dir, err := os.UserConfigDir()
 	if err != nil {
-		return err
+		dir = "."
 	}
-
-	store, err := database.Open(filepath.Join(dataDir, "attendance.db"))
-	if err != nil {
-		return err
+	appDir := filepath.Join(dir, "MeetAttendanceApp")
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		return ".", err
 	}
-	defer store.Close()
-
-	meetClient, err := googlemeet.New(embeddedGoogleCredentials, filepath.Join(dataDir, "token.json"), cfg.GoogleRedirectURL)
-	if err != nil {
-		return err
-	}
-	apiKey := strings.TrimSpace(string(embeddedGeminiKey))
-
-	attendance := application.NewAttendanceUseCase(store, store, meetClient, cfg.MeetLookbackMonths)
-	lessons := application.NewLessonUseCase(gemini.New(apiKey, cfg.GeminiModel), pdfadapter.New())
-	views, err := web.NewRenderer()
-	if err != nil {
-		return err
-	}
-
-	syncJob := handlers.NewSyncJob(attendance)
-	dashboard := handlers.NewDashboard(attendance, views, syncJob)
-	studentDetail := handlers.NewStudentDetail(attendance, views)
-	studentUpdate := handlers.NewStudentUpdate(attendance)
-	syncMeet := handlers.NewSyncMeet(syncJob)
-	oauth := handlers.NewOAuth(attendance)
-	lesson := handlers.NewGenerateLesson(lessons, views)
-
-	router := web.NewRouter(web.Routes{
-		Dashboard: dashboard, StudentDetail: studentDetail,
-		StudentUpdate: studentUpdate, SyncMeet: syncMeet,
-		OAuthLogin: oauth.Login, OAuthCallback: oauth.Callback, OAuthDisconnect: oauth.Disconnect,
-		LessonPage: lesson.Page, LessonGenerate: lesson.Generate, LessonExport: lesson.Export,
-	})
-	server := &http.Server{Addr: cfg.Address, Handler: router, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 15 * time.Minute, WriteTimeout: 20 * time.Minute, IdleTimeout: 60 * time.Second}
-
-	serverError := make(chan error, 1)
-	go func() {
-		log.Printf("Ứng dụng đang chạy tại http://localhost:9000")
-		log.Printf("Dữ liệu được lưu tại %s", dataDir)
-		serverError <- server.ListenAndServe()
-	}()
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	select {
-	case err := <-serverError:
-		if !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-	case <-stop:
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return server.Shutdown(ctx)
-	}
-	return nil
-}
-
-func applicationDirectory() (string, error) {
-	executablePath, err := os.Executable()
-	if err != nil {
-		return "", err
-	}
-	executableDir := filepath.Dir(executablePath)
-
-	// `go run` places its executable in the operating system's temporary
-	// directory. Keep development data in the project directory instead.
-	if relative, err := filepath.Rel(os.TempDir(), executableDir); err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		if workingDir, err := os.Getwd(); err == nil {
-			return workingDir, nil
-		}
-	}
-	return executableDir, nil
+	return appDir, nil
 }

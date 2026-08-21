@@ -11,90 +11,391 @@ import (
 	"time"
 )
 
-const countStudents = `-- name: CountStudents :one
-SELECT COUNT(*) FROM students
+const checkStudentExists = `-- name: CheckStudentExists :one
+SELECT EXISTS(
+    SELECT 1 FROM students WHERE class = ?
+)
 `
 
-func (q *Queries) CountStudents(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, countStudents)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+func (q *Queries) CheckStudentExists(ctx context.Context, class string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, checkStudentExists, class)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const createLessonDraft = `-- name: CreateLessonDraft :one
+INSERT INTO lesson_drafts (
+    source_url, custom_prompt, model, status, created_at
+) VALUES (?, ?, ?, ?, ?)
+RETURNING id
+`
+
+type CreateLessonDraftParams struct {
+	SourceUrl    string    `db:"source_url" json:"source_url"`
+	CustomPrompt string    `db:"custom_prompt" json:"custom_prompt"`
+	Model        string    `db:"model" json:"model"`
+	Status       string    `db:"status" json:"status"`
+	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+}
+
+func (q *Queries) CreateLessonDraft(ctx context.Context, arg CreateLessonDraftParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createLessonDraft,
+		arg.SourceUrl,
+		arg.CustomPrompt,
+		arg.Model,
+		arg.Status,
+		arg.CreatedAt,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createMistake = `-- name: CreateMistake :one
+INSERT INTO mistakes (
+    student_id, assignment_id, topic, error_reason, is_resolved, created_at
+) VALUES (?, ?, ?, ?, ?, ?)
+RETURNING id
+`
+
+type CreateMistakeParams struct {
+	StudentID    int64     `db:"student_id" json:"student_id"`
+	AssignmentID int64     `db:"assignment_id" json:"assignment_id"`
+	Topic        string    `db:"topic" json:"topic"`
+	ErrorReason  string    `db:"error_reason" json:"error_reason"`
+	IsResolved   int64     `db:"is_resolved" json:"is_resolved"`
+	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+}
+
+// NEW INFRASTRUCTURE: persist one detected mistake through sqlc.
+func (q *Queries) CreateMistake(ctx context.Context, arg CreateMistakeParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, createMistake,
+		arg.StudentID,
+		arg.AssignmentID,
+		arg.Topic,
+		arg.ErrorReason,
+		arg.IsResolved,
+		arg.CreatedAt,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const createStudent = `-- name: CreateStudent :exec
-INSERT INTO students (name, google_space_name, cycle_start_day)
+INSERT INTO students (class, name, cycle_start_day)
 VALUES (?, ?, ?)
 `
 
 type CreateStudentParams struct {
-	Name            string `db:"name" json:"name"`
-	GoogleSpaceName string `db:"google_space_name" json:"google_space_name"`
-	CycleStartDay   int64  `db:"cycle_start_day" json:"cycle_start_day"`
+	Class         string `db:"class" json:"class"`
+	Name          string `db:"name" json:"name"`
+	CycleStartDay int64  `db:"cycle_start_day" json:"cycle_start_day"`
 }
 
 func (q *Queries) CreateStudent(ctx context.Context, arg CreateStudentParams) error {
-	_, err := q.db.ExecContext(ctx, createStudent, arg.Name, arg.GoogleSpaceName, arg.CycleStartDay)
+	_, err := q.db.ExecContext(ctx, createStudent, arg.Class, arg.Name, arg.CycleStartDay)
 	return err
 }
 
-const deleteStudentsWithoutMeetings = `-- name: DeleteStudentsWithoutMeetings :exec
-DELETE FROM students
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM meetings
-    WHERE meetings.google_space_name = students.google_space_name
-)
-`
-
-func (q *Queries) DeleteStudentsWithoutMeetings(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, deleteStudentsWithoutMeetings)
-	return err
-}
-
-const getStudent = `-- name: GetStudent :one
-SELECT id, name, google_space_name, cycle_start_day
-FROM students
+const deleteLessonDraft = `-- name: DeleteLessonDraft :exec
+DELETE FROM lesson_drafts
 WHERE id = ?
 `
 
-func (q *Queries) GetStudent(ctx context.Context, id int64) (Student, error) {
-	row := q.db.QueryRowContext(ctx, getStudent, id)
-	var i Student
+func (q *Queries) DeleteLessonDraft(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteLessonDraft, id)
+	return err
+}
+
+const getAssignmentByPageID = `-- name: GetAssignmentByPageID :one
+SELECT
+    a.id,
+    a.title,
+    a.assignment_type,
+    a.status,
+    a.assigned_at,
+    a.target_page_id,
+    a.items_json,
+    s.id AS student_id,
+    s.class AS student_class,
+    s.name AS student_name,
+    s.cycle_start_day AS student_cycle_start_day,
+    s.student_workspace_id,
+    s.teacher_workspace_id
+FROM assignments a
+JOIN students s ON s.id = a.assignee_id
+WHERE a.target_page_id = ?
+`
+
+type GetAssignmentByPageIDRow struct {
+	ID                   int64          `db:"id" json:"id"`
+	Title                string         `db:"title" json:"title"`
+	AssignmentType       string         `db:"assignment_type" json:"assignment_type"`
+	Status               string         `db:"status" json:"status"`
+	AssignedAt           time.Time      `db:"assigned_at" json:"assigned_at"`
+	TargetPageID         string         `db:"target_page_id" json:"target_page_id"`
+	ItemsJson            string         `db:"items_json" json:"items_json"`
+	StudentID            int64          `db:"student_id" json:"student_id"`
+	StudentClass         string         `db:"student_class" json:"student_class"`
+	StudentName          string         `db:"student_name" json:"student_name"`
+	StudentCycleStartDay int64          `db:"student_cycle_start_day" json:"student_cycle_start_day"`
+	StudentWorkspaceID   sql.NullString `db:"student_workspace_id" json:"student_workspace_id"`
+	TeacherWorkspaceID   sql.NullString `db:"teacher_workspace_id" json:"teacher_workspace_id"`
+}
+
+// NEW INFRASTRUCTURE: load Assignment and student by OneNote PageID.
+func (q *Queries) GetAssignmentByPageID(ctx context.Context, targetPageID string) (GetAssignmentByPageIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getAssignmentByPageID, targetPageID)
+	var i GetAssignmentByPageIDRow
 	err := row.Scan(
 		&i.ID,
-		&i.Name,
-		&i.GoogleSpaceName,
-		&i.CycleStartDay,
+		&i.Title,
+		&i.AssignmentType,
+		&i.Status,
+		&i.AssignedAt,
+		&i.TargetPageID,
+		&i.ItemsJson,
+		&i.StudentID,
+		&i.StudentClass,
+		&i.StudentName,
+		&i.StudentCycleStartDay,
+		&i.StudentWorkspaceID,
+		&i.TeacherWorkspaceID,
 	)
 	return i, err
 }
 
-const listMeetingParticipants = `-- name: ListMeetingParticipants :many
-SELECT id, meeting_id, google_participant_name, google_user_name,
-       display_name, joined_at, left_at, duration_minutes
-FROM participants
-WHERE meeting_id = ?
-ORDER BY duration_minutes DESC, display_name COLLATE NOCASE
+const getLessonDraft = `-- name: GetLessonDraft :one
+SELECT id, source_url, custom_prompt, status, error_message,
+       title, created_at, updated_at, model, lesson_data_json
+FROM lesson_drafts
+WHERE id = ?
 `
 
-func (q *Queries) ListMeetingParticipants(ctx context.Context, meetingID int64) ([]Participant, error) {
-	rows, err := q.db.QueryContext(ctx, listMeetingParticipants, meetingID)
+type GetLessonDraftRow struct {
+	ID             int64          `db:"id" json:"id"`
+	SourceUrl      string         `db:"source_url" json:"source_url"`
+	CustomPrompt   string         `db:"custom_prompt" json:"custom_prompt"`
+	Status         string         `db:"status" json:"status"`
+	ErrorMessage   string         `db:"error_message" json:"error_message"`
+	Title          string         `db:"title" json:"title"`
+	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt      sql.NullTime   `db:"updated_at" json:"updated_at"`
+	Model          string         `db:"model" json:"model"`
+	LessonDataJson sql.NullString `db:"lesson_data_json" json:"lesson_data_json"`
+}
+
+func (q *Queries) GetLessonDraft(ctx context.Context, id int64) (GetLessonDraftRow, error) {
+	row := q.db.QueryRowContext(ctx, getLessonDraft, id)
+	var i GetLessonDraftRow
+	err := row.Scan(
+		&i.ID,
+		&i.SourceUrl,
+		&i.CustomPrompt,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.Title,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Model,
+		&i.LessonDataJson,
+	)
+	return i, err
+}
+
+const getMistakeContext = `-- name: GetMistakeContext :one
+SELECT
+    m.id,
+    m.student_id,
+    m.assignment_id,
+    m.topic,
+    m.error_reason,
+    m.is_resolved,
+    m.created_at,
+    s.class AS student_class,
+    s.name AS student_name,
+    s.cycle_start_day AS student_cycle_start_day,
+    s.student_workspace_id,
+    s.teacher_workspace_id
+FROM mistakes m
+JOIN students s ON s.id = m.student_id
+WHERE m.id = ?
+`
+
+type GetMistakeContextRow struct {
+	ID                   int64          `db:"id" json:"id"`
+	StudentID            int64          `db:"student_id" json:"student_id"`
+	AssignmentID         int64          `db:"assignment_id" json:"assignment_id"`
+	Topic                string         `db:"topic" json:"topic"`
+	ErrorReason          string         `db:"error_reason" json:"error_reason"`
+	IsResolved           int64          `db:"is_resolved" json:"is_resolved"`
+	CreatedAt            time.Time      `db:"created_at" json:"created_at"`
+	StudentClass         string         `db:"student_class" json:"student_class"`
+	StudentName          string         `db:"student_name" json:"student_name"`
+	StudentCycleStartDay int64          `db:"student_cycle_start_day" json:"student_cycle_start_day"`
+	StudentWorkspaceID   sql.NullString `db:"student_workspace_id" json:"student_workspace_id"`
+	TeacherWorkspaceID   sql.NullString `db:"teacher_workspace_id" json:"teacher_workspace_id"`
+}
+
+// NEW UI INFRASTRUCTURE: load all data needed to create remediation work.
+func (q *Queries) GetMistakeContext(ctx context.Context, id int64) (GetMistakeContextRow, error) {
+	row := q.db.QueryRowContext(ctx, getMistakeContext, id)
+	var i GetMistakeContextRow
+	err := row.Scan(
+		&i.ID,
+		&i.StudentID,
+		&i.AssignmentID,
+		&i.Topic,
+		&i.ErrorReason,
+		&i.IsResolved,
+		&i.CreatedAt,
+		&i.StudentClass,
+		&i.StudentName,
+		&i.StudentCycleStartDay,
+		&i.StudentWorkspaceID,
+		&i.TeacherWorkspaceID,
+	)
+	return i, err
+}
+
+const getSetting = `-- name: GetSetting :one
+SELECT value FROM system_settings WHERE key = ?
+`
+
+func (q *Queries) GetSetting(ctx context.Context, key string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getSetting, key)
+	var value string
+	err := row.Scan(&value)
+	return value, err
+}
+
+const getStudent = `-- name: GetStudent :one
+SELECT id, class, name, cycle_start_day, student_workspace_id, teacher_workspace_id
+FROM students
+WHERE id = ?
+`
+
+type GetStudentRow struct {
+	ID                 int64          `db:"id" json:"id"`
+	Class              string         `db:"class" json:"class"`
+	Name               string         `db:"name" json:"name"`
+	CycleStartDay      int64          `db:"cycle_start_day" json:"cycle_start_day"`
+	StudentWorkspaceID sql.NullString `db:"student_workspace_id" json:"student_workspace_id"`
+	TeacherWorkspaceID sql.NullString `db:"teacher_workspace_id" json:"teacher_workspace_id"`
+}
+
+func (q *Queries) GetStudent(ctx context.Context, id int64) (GetStudentRow, error) {
+	row := q.db.QueryRowContext(ctx, getStudent, id)
+	var i GetStudentRow
+	err := row.Scan(
+		&i.ID,
+		&i.Class,
+		&i.Name,
+		&i.CycleStartDay,
+		&i.StudentWorkspaceID,
+		&i.TeacherWorkspaceID,
+	)
+	return i, err
+}
+
+const listAssignmentsForGrading = `-- name: ListAssignmentsForGrading :many
+SELECT
+    a.id,
+    a.title,
+    a.status,
+    a.assigned_at,
+    a.target_page_id,
+    a.items_json,
+    s.id AS student_id,
+    s.name AS student_name
+FROM assignments a
+JOIN students s ON s.id = a.assignee_id
+ORDER BY a.assigned_at DESC
+`
+
+type ListAssignmentsForGradingRow struct {
+	ID           int64     `db:"id" json:"id"`
+	Title        string    `db:"title" json:"title"`
+	Status       string    `db:"status" json:"status"`
+	AssignedAt   time.Time `db:"assigned_at" json:"assigned_at"`
+	TargetPageID string    `db:"target_page_id" json:"target_page_id"`
+	ItemsJson    string    `db:"items_json" json:"items_json"`
+	StudentID    int64     `db:"student_id" json:"student_id"`
+	StudentName  string    `db:"student_name" json:"student_name"`
+}
+
+// NEW UI INFRASTRUCTURE: aggregate assignments for the grading screen.
+func (q *Queries) ListAssignmentsForGrading(ctx context.Context) ([]ListAssignmentsForGradingRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAssignmentsForGrading)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Participant
+	var items []ListAssignmentsForGradingRow
 	for rows.Next() {
-		var i Participant
+		var i ListAssignmentsForGradingRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.MeetingID,
-			&i.GoogleParticipantName,
-			&i.GoogleUserName,
-			&i.DisplayName,
-			&i.JoinedAt,
-			&i.LeftAt,
+			&i.Title,
+			&i.Status,
+			&i.AssignedAt,
+			&i.TargetPageID,
+			&i.ItemsJson,
+			&i.StudentID,
+			&i.StudentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listClassMeetings = `-- name: ListClassMeetings :many
+SELECT id, class, code, started_at, ended_at, duration_minutes
+FROM meetings
+WHERE class = ?
+  AND started_at >= ?
+  AND started_at <= ?
+  AND duration_minutes >= ?
+ORDER BY started_at DESC
+`
+
+type ListClassMeetingsParams struct {
+	Class           string    `db:"class" json:"class"`
+	StartedAt       time.Time `db:"started_at" json:"started_at"`
+	StartedAt_2     time.Time `db:"started_at_2" json:"started_at_2"`
+	DurationMinutes int64     `db:"duration_minutes" json:"duration_minutes"`
+}
+
+func (q *Queries) ListClassMeetings(ctx context.Context, arg ListClassMeetingsParams) ([]Meeting, error) {
+	rows, err := q.db.QueryContext(ctx, listClassMeetings,
+		arg.Class,
+		arg.StartedAt,
+		arg.StartedAt_2,
+		arg.DurationMinutes,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Meeting
+	for rows.Next() {
+		var i Meeting
+		if err := rows.Scan(
+			&i.ID,
+			&i.Class,
+			&i.Code,
+			&i.StartedAt,
+			&i.EndedAt,
 			&i.DurationMinutes,
 		); err != nil {
 			return nil, err
@@ -110,78 +411,255 @@ func (q *Queries) ListMeetingParticipants(ctx context.Context, meetingID int64) 
 	return items, nil
 }
 
-const listStudentMeetings = `-- name: ListStudentMeetings :many
-SELECT id, google_record_name, google_space_name, started_at, ended_at
-FROM meetings
-WHERE google_space_name = ?
-  AND started_at >= ?
-  AND started_at < ?
-  AND ended_at IS NOT NULL
-  AND unixepoch(ended_at) - unixepoch(started_at) >= ?4 * 60
-ORDER BY started_at DESC
+const listLessonDrafts = `-- name: ListLessonDrafts :many
+SELECT id, source_url, custom_prompt, model, status, error_message,
+       title, created_at, updated_at, lesson_data_json
+FROM lesson_drafts
+ORDER BY created_at DESC
 `
 
-type ListStudentMeetingsParams struct {
-	GoogleSpaceName    string      `db:"google_space_name" json:"google_space_name"`
-	StartedAt          time.Time   `db:"started_at" json:"started_at"`
-	StartedAt_2        time.Time   `db:"started_at_2" json:"started_at_2"`
-	MinDurationMinutes interface{} `db:"min_duration_minutes" json:"min_duration_minutes"`
+type ListLessonDraftsRow struct {
+	ID             int64          `db:"id" json:"id"`
+	SourceUrl      string         `db:"source_url" json:"source_url"`
+	CustomPrompt   string         `db:"custom_prompt" json:"custom_prompt"`
+	Model          string         `db:"model" json:"model"`
+	Status         string         `db:"status" json:"status"`
+	ErrorMessage   string         `db:"error_message" json:"error_message"`
+	Title          string         `db:"title" json:"title"`
+	CreatedAt      time.Time      `db:"created_at" json:"created_at"`
+	UpdatedAt      sql.NullTime   `db:"updated_at" json:"updated_at"`
+	LessonDataJson sql.NullString `db:"lesson_data_json" json:"lesson_data_json"`
 }
 
-func (q *Queries) ListStudentMeetings(ctx context.Context, arg ListStudentMeetingsParams) ([]Meeting, error) {
-	rows, err := q.db.QueryContext(ctx, listStudentMeetings,
-		arg.GoogleSpaceName,
+func (q *Queries) ListLessonDrafts(ctx context.Context) ([]ListLessonDraftsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLessonDrafts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLessonDraftsRow
+	for rows.Next() {
+		var i ListLessonDraftsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourceUrl,
+			&i.CustomPrompt,
+			&i.Model,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.Title,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LessonDataJson,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMeetingParticipants = `-- name: ListMeetingParticipants :many
+SELECT id, meeting_id, name, first_joined_at, last_left_at, duration_minutes
+FROM participants
+WHERE meeting_id = ?
+ORDER BY duration_minutes DESC, name ASC
+`
+
+func (q *Queries) ListMeetingParticipants(ctx context.Context, meetingID int64) ([]Participant, error) {
+	rows, err := q.db.QueryContext(ctx, listMeetingParticipants, meetingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Participant
+	for rows.Next() {
+		var i Participant
+		if err := rows.Scan(
+			&i.ID,
+			&i.MeetingID,
+			&i.Name,
+			&i.FirstJoinedAt,
+			&i.LastLeftAt,
+			&i.DurationMinutes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMistakesWithStudents = `-- name: ListMistakesWithStudents :many
+SELECT
+    m.id,
+    m.student_id,
+    m.assignment_id,
+    m.topic,
+    m.error_reason,
+    m.is_resolved,
+    m.created_at,
+    s.name AS student_name
+FROM mistakes m
+JOIN students s ON s.id = m.student_id
+ORDER BY s.name ASC, m.created_at DESC
+`
+
+type ListMistakesWithStudentsRow struct {
+	ID           int64     `db:"id" json:"id"`
+	StudentID    int64     `db:"student_id" json:"student_id"`
+	AssignmentID int64     `db:"assignment_id" json:"assignment_id"`
+	Topic        string    `db:"topic" json:"topic"`
+	ErrorReason  string    `db:"error_reason" json:"error_reason"`
+	IsResolved   int64     `db:"is_resolved" json:"is_resolved"`
+	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	StudentName  string    `db:"student_name" json:"student_name"`
+}
+
+// NEW UI INFRASTRUCTURE: list mistakes together with their student.
+func (q *Queries) ListMistakesWithStudents(ctx context.Context) ([]ListMistakesWithStudentsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMistakesWithStudents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMistakesWithStudentsRow
+	for rows.Next() {
+		var i ListMistakesWithStudentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.StudentID,
+			&i.AssignmentID,
+			&i.Topic,
+			&i.ErrorReason,
+			&i.IsResolved,
+			&i.CreatedAt,
+			&i.StudentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStudentChoices = `-- name: ListStudentChoices :many
+SELECT id, name, class, student_workspace_id, teacher_workspace_id
+FROM students
+ORDER BY name ASC
+`
+
+type ListStudentChoicesRow struct {
+	ID                 int64          `db:"id" json:"id"`
+	Name               string         `db:"name" json:"name"`
+	Class              string         `db:"class" json:"class"`
+	StudentWorkspaceID sql.NullString `db:"student_workspace_id" json:"student_workspace_id"`
+	TeacherWorkspaceID sql.NullString `db:"teacher_workspace_id" json:"teacher_workspace_id"`
+}
+
+// NEW UI INFRASTRUCTURE: populate compact student selectors.
+func (q *Queries) ListStudentChoices(ctx context.Context) ([]ListStudentChoicesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listStudentChoices)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStudentChoicesRow
+	for rows.Next() {
+		var i ListStudentChoicesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Class,
+			&i.StudentWorkspaceID,
+			&i.TeacherWorkspaceID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStudentsWithStats = `-- name: ListStudentsWithStats :many
+SELECT
+    s.id,
+    s.class,
+    s.name,
+    s.cycle_start_day,
+    COUNT(m.id) AS total_sessions,
+    CAST(COALESCE(SUM(m.duration_minutes), 0) AS INTEGER) AS total_duration_minutes
+FROM students s
+LEFT JOIN meetings m ON s.class = m.class
+    AND m.started_at >= ?
+    AND m.started_at <= ?
+    AND m.duration_minutes >= ?
+WHERE s.name LIKE '%' || COALESCE(?, '') || '%'
+GROUP BY s.id
+ORDER BY s.id ASC
+`
+
+type ListStudentsWithStatsParams struct {
+	StartedAt       time.Time      `db:"started_at" json:"started_at"`
+	StartedAt_2     time.Time      `db:"started_at_2" json:"started_at_2"`
+	DurationMinutes int64          `db:"duration_minutes" json:"duration_minutes"`
+	Column4         sql.NullString `db:"column_4" json:"column_4"`
+}
+
+type ListStudentsWithStatsRow struct {
+	ID                   int64  `db:"id" json:"id"`
+	Class                string `db:"class" json:"class"`
+	Name                 string `db:"name" json:"name"`
+	CycleStartDay        int64  `db:"cycle_start_day" json:"cycle_start_day"`
+	TotalSessions        int64  `db:"total_sessions" json:"total_sessions"`
+	TotalDurationMinutes int64  `db:"total_duration_minutes" json:"total_duration_minutes"`
+}
+
+func (q *Queries) ListStudentsWithStats(ctx context.Context, arg ListStudentsWithStatsParams) ([]ListStudentsWithStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listStudentsWithStats,
 		arg.StartedAt,
 		arg.StartedAt_2,
-		arg.MinDurationMinutes,
+		arg.DurationMinutes,
+		arg.Column4,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Meeting
+	var items []ListStudentsWithStatsRow
 	for rows.Next() {
-		var i Meeting
+		var i ListStudentsWithStatsRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.GoogleRecordName,
-			&i.GoogleSpaceName,
-			&i.StartedAt,
-			&i.EndedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listStudents = `-- name: ListStudents :many
-SELECT id, name, google_space_name, cycle_start_day
-FROM students
-ORDER BY name COLLATE NOCASE
-`
-
-func (q *Queries) ListStudents(ctx context.Context) ([]Student, error) {
-	rows, err := q.db.QueryContext(ctx, listStudents)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Student
-	for rows.Next() {
-		var i Student
-		if err := rows.Scan(
-			&i.ID,
+			&i.Class,
 			&i.Name,
-			&i.GoogleSpaceName,
 			&i.CycleStartDay,
+			&i.TotalSessions,
+			&i.TotalDurationMinutes,
 		); err != nil {
 			return nil, err
 		}
@@ -196,51 +674,221 @@ func (q *Queries) ListStudents(ctx context.Context) ([]Student, error) {
 	return items, nil
 }
 
-const listUnassignedSpaces = `-- name: ListUnassignedSpaces :many
-SELECT DISTINCT meetings.google_space_name
-FROM meetings
-LEFT JOIN students ON students.google_space_name = meetings.google_space_name
-WHERE students.id IS NULL
-ORDER BY meetings.google_space_name
+const markMistakeResolved = `-- name: MarkMistakeResolved :execrows
+UPDATE mistakes
+SET is_resolved = 1
+WHERE id = ?
 `
 
-func (q *Queries) ListUnassignedSpaces(ctx context.Context) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listUnassignedSpaces)
+// NEW UI INFRASTRUCTURE: close a mistake after remediation is assigned.
+func (q *Queries) MarkMistakeResolved(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markMistakeResolved, id)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var google_space_name string
-		if err := rows.Scan(&google_space_name); err != nil {
-			return nil, err
-		}
-		items = append(items, google_space_name)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+	return result.RowsAffected()
+}
+
+const saveAssignment = `-- name: SaveAssignment :one
+INSERT INTO assignments (
+    title, assignment_type, status, assigned_at, assignee_id, target_page_id, items_json
+) VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(target_page_id) DO UPDATE SET
+    title = excluded.title,
+    assignment_type = excluded.assignment_type,
+    status = excluded.status,
+    assigned_at = excluded.assigned_at,
+    assignee_id = excluded.assignee_id,
+    items_json = excluded.items_json
+RETURNING id
+`
+
+type SaveAssignmentParams struct {
+	Title          string    `db:"title" json:"title"`
+	AssignmentType string    `db:"assignment_type" json:"assignment_type"`
+	Status         string    `db:"status" json:"status"`
+	AssignedAt     time.Time `db:"assigned_at" json:"assigned_at"`
+	AssigneeID     int64     `db:"assignee_id" json:"assignee_id"`
+	TargetPageID   string    `db:"target_page_id" json:"target_page_id"`
+	ItemsJson      string    `db:"items_json" json:"items_json"`
+}
+
+// NEW INFRASTRUCTURE: insert/update Assignment by OneNote PageID.
+func (q *Queries) SaveAssignment(ctx context.Context, arg SaveAssignmentParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, saveAssignment,
+		arg.Title,
+		arg.AssignmentType,
+		arg.Status,
+		arg.AssignedAt,
+		arg.AssigneeID,
+		arg.TargetPageID,
+		arg.ItemsJson,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const setSetting = `-- name: SetSetting :exec
+INSERT INTO system_settings (key, value)
+VALUES (?, ?)
+ON CONFLICT(key) DO UPDATE SET value = excluded.value
+`
+
+type SetSettingParams struct {
+	Key   string `db:"key" json:"key"`
+	Value string `db:"value" json:"value"`
+}
+
+func (q *Queries) SetSetting(ctx context.Context, arg SetSettingParams) error {
+	_, err := q.db.ExecContext(ctx, setSetting, arg.Key, arg.Value)
+	return err
+}
+
+const updateLessonDraftGeneratedContent = `-- name: UpdateLessonDraftGeneratedContent :exec
+UPDATE lesson_drafts
+SET status = 'completed',
+    title = ?,
+    teacher_content = ?,
+    student_content = ?,
+    error_message = '',
+    updated_at = ?
+WHERE id = ?
+`
+
+type UpdateLessonDraftGeneratedContentParams struct {
+	Title          string       `db:"title" json:"title"`
+	TeacherContent string       `db:"teacher_content" json:"teacher_content"`
+	StudentContent string       `db:"student_content" json:"student_content"`
+	UpdatedAt      sql.NullTime `db:"updated_at" json:"updated_at"`
+	ID             int64        `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateLessonDraftGeneratedContent(ctx context.Context, arg UpdateLessonDraftGeneratedContentParams) error {
+	_, err := q.db.ExecContext(ctx, updateLessonDraftGeneratedContent,
+		arg.Title,
+		arg.TeacherContent,
+		arg.StudentContent,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateLessonDraftLessonData = `-- name: UpdateLessonDraftLessonData :exec
+UPDATE lesson_drafts
+SET status = ?,
+    title = ?,
+    source_url = ?,
+    custom_prompt = ?,
+    model = ?,
+    lesson_data_json = ?,
+    error_message = ?,
+    updated_at = ?
+WHERE id = ?
+`
+
+type UpdateLessonDraftLessonDataParams struct {
+	Status         string         `db:"status" json:"status"`
+	Title          string         `db:"title" json:"title"`
+	SourceUrl      string         `db:"source_url" json:"source_url"`
+	CustomPrompt   string         `db:"custom_prompt" json:"custom_prompt"`
+	Model          string         `db:"model" json:"model"`
+	LessonDataJson sql.NullString `db:"lesson_data_json" json:"lesson_data_json"`
+	ErrorMessage   string         `db:"error_message" json:"error_message"`
+	UpdatedAt      sql.NullTime   `db:"updated_at" json:"updated_at"`
+	ID             int64          `db:"id" json:"id"`
+}
+
+// NEW INFRASTRUCTURE: persist the structured Lesson as JSON.
+func (q *Queries) UpdateLessonDraftLessonData(ctx context.Context, arg UpdateLessonDraftLessonDataParams) error {
+	_, err := q.db.ExecContext(ctx, updateLessonDraftLessonData,
+		arg.Status,
+		arg.Title,
+		arg.SourceUrl,
+		arg.CustomPrompt,
+		arg.Model,
+		arg.LessonDataJson,
+		arg.ErrorMessage,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateLessonDraftStatus = `-- name: UpdateLessonDraftStatus :exec
+UPDATE lesson_drafts
+SET status = ?, error_message = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateLessonDraftStatusParams struct {
+	Status       string       `db:"status" json:"status"`
+	ErrorMessage string       `db:"error_message" json:"error_message"`
+	UpdatedAt    sql.NullTime `db:"updated_at" json:"updated_at"`
+	ID           int64        `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateLessonDraftStatus(ctx context.Context, arg UpdateLessonDraftStatusParams) error {
+	_, err := q.db.ExecContext(ctx, updateLessonDraftStatus,
+		arg.Status,
+		arg.ErrorMessage,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateLessonDraftUserContent = `-- name: UpdateLessonDraftUserContent :exec
+UPDATE lesson_drafts
+SET title = ?,
+    teacher_content = ?,
+    student_content = ?,
+    updated_at = ?
+WHERE id = ?
+`
+
+type UpdateLessonDraftUserContentParams struct {
+	Title          string       `db:"title" json:"title"`
+	TeacherContent string       `db:"teacher_content" json:"teacher_content"`
+	StudentContent string       `db:"student_content" json:"student_content"`
+	UpdatedAt      sql.NullTime `db:"updated_at" json:"updated_at"`
+	ID             int64        `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateLessonDraftUserContent(ctx context.Context, arg UpdateLessonDraftUserContentParams) error {
+	_, err := q.db.ExecContext(ctx, updateLessonDraftUserContent,
+		arg.Title,
+		arg.TeacherContent,
+		arg.StudentContent,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
 }
 
 const updateStudent = `-- name: UpdateStudent :execrows
 UPDATE students
-SET name = ?, cycle_start_day = ?
+SET name = ?, cycle_start_day = ?, student_workspace_id = ?, teacher_workspace_id = ?
 WHERE id = ?
 `
 
 type UpdateStudentParams struct {
-	Name          string `db:"name" json:"name"`
-	CycleStartDay int64  `db:"cycle_start_day" json:"cycle_start_day"`
-	ID            int64  `db:"id" json:"id"`
+	Name               string         `db:"name" json:"name"`
+	CycleStartDay      int64          `db:"cycle_start_day" json:"cycle_start_day"`
+	StudentWorkspaceID sql.NullString `db:"student_workspace_id" json:"student_workspace_id"`
+	TeacherWorkspaceID sql.NullString `db:"teacher_workspace_id" json:"teacher_workspace_id"`
+	ID                 int64          `db:"id" json:"id"`
 }
 
 func (q *Queries) UpdateStudent(ctx context.Context, arg UpdateStudentParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, updateStudent, arg.Name, arg.CycleStartDay, arg.ID)
+	result, err := q.db.ExecContext(ctx, updateStudent,
+		arg.Name,
+		arg.CycleStartDay,
+		arg.StudentWorkspaceID,
+		arg.TeacherWorkspaceID,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -249,28 +897,31 @@ func (q *Queries) UpdateStudent(ctx context.Context, arg UpdateStudentParams) (i
 
 const upsertMeeting = `-- name: UpsertMeeting :one
 INSERT INTO meetings (
-    google_record_name, google_space_name, started_at, ended_at
-) VALUES (?, ?, ?, ?)
-ON CONFLICT(google_record_name) DO UPDATE SET
-    google_space_name = excluded.google_space_name,
+    class, code, started_at, ended_at, duration_minutes
+) VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(code) DO UPDATE SET
+    class = excluded.class,
     started_at = excluded.started_at,
-    ended_at = COALESCE(excluded.ended_at, meetings.ended_at)
+    ended_at = excluded.ended_at,
+    duration_minutes = excluded.duration_minutes
 RETURNING id
 `
 
 type UpsertMeetingParams struct {
-	GoogleRecordName string       `db:"google_record_name" json:"google_record_name"`
-	GoogleSpaceName  string       `db:"google_space_name" json:"google_space_name"`
-	StartedAt        time.Time    `db:"started_at" json:"started_at"`
-	EndedAt          sql.NullTime `db:"ended_at" json:"ended_at"`
+	Class           string       `db:"class" json:"class"`
+	Code            string       `db:"code" json:"code"`
+	StartedAt       time.Time    `db:"started_at" json:"started_at"`
+	EndedAt         sql.NullTime `db:"ended_at" json:"ended_at"`
+	DurationMinutes int64        `db:"duration_minutes" json:"duration_minutes"`
 }
 
 func (q *Queries) UpsertMeeting(ctx context.Context, arg UpsertMeetingParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, upsertMeeting,
-		arg.GoogleRecordName,
-		arg.GoogleSpaceName,
+		arg.Class,
+		arg.Code,
 		arg.StartedAt,
 		arg.EndedAt,
+		arg.DurationMinutes,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -279,36 +930,28 @@ func (q *Queries) UpsertMeeting(ctx context.Context, arg UpsertMeetingParams) (i
 
 const upsertParticipant = `-- name: UpsertParticipant :exec
 INSERT INTO participants (
-    meeting_id, google_participant_name, google_user_name,
-    display_name, joined_at, left_at, duration_minutes
-) VALUES (?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(google_participant_name) DO UPDATE SET
-    meeting_id = excluded.meeting_id,
-    google_user_name = excluded.google_user_name,
-    display_name = excluded.display_name,
-    joined_at = excluded.joined_at,
-    left_at = excluded.left_at,
+    meeting_id, name, first_joined_at, last_left_at, duration_minutes
+) VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(meeting_id, name) DO UPDATE SET
+    first_joined_at = excluded.first_joined_at,
+    last_left_at = excluded.last_left_at,
     duration_minutes = excluded.duration_minutes
 `
 
 type UpsertParticipantParams struct {
-	MeetingID             int64        `db:"meeting_id" json:"meeting_id"`
-	GoogleParticipantName string       `db:"google_participant_name" json:"google_participant_name"`
-	GoogleUserName        string       `db:"google_user_name" json:"google_user_name"`
-	DisplayName           string       `db:"display_name" json:"display_name"`
-	JoinedAt              time.Time    `db:"joined_at" json:"joined_at"`
-	LeftAt                sql.NullTime `db:"left_at" json:"left_at"`
-	DurationMinutes       int64        `db:"duration_minutes" json:"duration_minutes"`
+	MeetingID       int64        `db:"meeting_id" json:"meeting_id"`
+	Name            string       `db:"name" json:"name"`
+	FirstJoinedAt   time.Time    `db:"first_joined_at" json:"first_joined_at"`
+	LastLeftAt      sql.NullTime `db:"last_left_at" json:"last_left_at"`
+	DurationMinutes int64        `db:"duration_minutes" json:"duration_minutes"`
 }
 
 func (q *Queries) UpsertParticipant(ctx context.Context, arg UpsertParticipantParams) error {
 	_, err := q.db.ExecContext(ctx, upsertParticipant,
 		arg.MeetingID,
-		arg.GoogleParticipantName,
-		arg.GoogleUserName,
-		arg.DisplayName,
-		arg.JoinedAt,
-		arg.LeftAt,
+		arg.Name,
+		arg.FirstJoinedAt,
+		arg.LastLeftAt,
 		arg.DurationMinutes,
 	)
 	return err

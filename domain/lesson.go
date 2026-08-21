@@ -1,5 +1,14 @@
 package domain
 
+import "time"
+
+type Audience string
+
+const (
+	AudienceTeacher Audience = "teacher"
+	AudienceStudent Audience = "student"
+)
+
 type TeacherExample struct {
 	ExampleNum                 int    `json:"example_num"`
 	Problem                    string `json:"problem"`
@@ -17,7 +26,7 @@ type Section struct {
 	TeacherExamples   []TeacherExample `json:"teacher_examples"`
 }
 
-type AIExercise struct {
+type Exercise struct {
 	ID          int      `json:"id"`
 	Type        string   `json:"type"`
 	Difficulty  string   `json:"difficulty"`
@@ -27,22 +36,43 @@ type AIExercise struct {
 	Explanation string   `json:"explanation"`
 }
 
-type LessonData struct {
-	LessonTitle          string       `json:"lesson_title"`
-	LessonOverview       string       `json:"lesson_overview"`
-	Sections             []Section    `json:"sections"`
-	AIGeneratedExercises []AIExercise `json:"ai_generated_exercises"`
+type Lesson struct {
+	Title     string     `json:"title"`
+	Overview  string     `json:"overview"`
+	Sections  []Section  `json:"sections"`
+	Exercises []Exercise `json:"exercises"`
 }
 
-type LessonFiles struct {
-	Title      string
-	TeacherPDF []byte
-	StudentPDF []byte
+type Document struct {
+	Title       string
+	ContentType string
+	Data        []byte
 }
+
+type DraftStatus string
+
+const (
+	DraftStatusPending    DraftStatus = "pending"
+	DraftStatusProcessing DraftStatus = "processing"
+	DraftStatusCompleted  DraftStatus = "completed"
+	DraftStatusFailed     DraftStatus = "failed"
+)
 
 type LessonDraft struct {
-	Title           string
-	SourceURL       string
-	TeacherMarkdown string
-	StudentMarkdown string
+	ID           int         `json:"id"`
+	SourceURL    string      `json:"source_url"`
+	CustomPrompt string      `json:"custom_prompt"`
+	Status       DraftStatus `json:"status"`
+	ErrorMessage string      `json:"error_message,omitempty"`
+	Title        string      `json:"title"` // Tên bài giảng (AI sinh ra hoặc GV sửa)
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    *time.Time  `json:"updated_at"`
+	Model        string      `json:"model"` // Ví dụ: "gemini-1.5-flash"
+	LessonData   *Lesson     `json:"lesson_data,omitempty"`
+}
+
+type AIModelInfo struct {
+	ID          string `json:"id"`           // Ví dụ: "gemini-1.5-flash", "gemini-2.0-flash"
+	DisplayName string `json:"display_name"` // Ví dụ: "Gemini 1.5 Flash"
+	Description string `json:"description"`  // Mô tả ngắn về model
 }

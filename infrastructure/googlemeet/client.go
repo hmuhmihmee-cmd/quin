@@ -2,13 +2,10 @@ package googlemeet
 
 import (
 	"context"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"meet-attendance-clean/application"
-	"meet-attendance-clean/domain"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,30 +13,38 @@ import (
 	"strings"
 	"time"
 
+	"meet-attendance-clean/domain"
+
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 )
 
-//go:embed ./../Config/google-oauth.json
-var credentials []byte
+const meetAPIBase = "https://meet.googleapis.com/v2"
+
+// Khai báo múi giờ Việt Nam (UTC+7) dùng cho toàn bộ package hạ tầng này
+var vnLocation = time.FixedZone("ICT", 7*3600)
+
 type Client struct {
 	config    *oauth2.Config
 	tokenPath string
 }
 
-func New( tokenPath, redirectURL string) (*Client, error) {
+func New(credentials []byte, tokenPath, redirectURL string) (*Client, error) {
 	if len(credentials) == 0 {
 		return nil, errors.New("cấu hình Google OAuth nhúng trong ứng dụng đang trống")
 	}
-	config, err := google.ConfigFromJSON(credentials, "https://www.googleapis.com/auth/meetings.space.readonly")
+	cfg, err := google.ConfigFromJSON(credentials, "https://www.googleapis.com/auth/meetings.space.readonly")
 	if err != nil {
 		return nil, fmt.Errorf("cấu hình Google OAuth không hợp lệ: %w", err)
 	}
-	config.RedirectURL = redirectURL
-	return &Client{config: config, tokenPath: tokenPath}, nil
+	cfg.RedirectURL = redirectURL
+	return &Client{config: cfg, tokenPath: tokenPath}, nil
 }
 
-func (c *Client) IsConnected() bool { _, err := c.readToken(); return err == nil }
+func (c *Client) IsConnected() bool {
+	_, err := os.Stat(c.tokenPath)
+	return err == nil
+}
 
 func (c *Client) AuthorizationURL(state string) (string, error) {
 	return c.config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce, oauth2.SetAuthURLParam("prompt", "select_account")), nil
@@ -50,220 +55,6 @@ func (c *Client) Exchange(ctx context.Context, code string) error {
 	if err != nil {
 		return fmt.Errorf("đổi OAuth token: %w", err)
 	}
-	return c.saveToken(token)
-}
-
-func (c *Client) Disconnect() error {
-	err := os.Remove(c.tokenPath)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	return err
-}
-
-func (c *Client) ListMeetings(ctx context.Context, since time.Time) ([]application.ImportedMeeting, error) {
-	token, err := c.readToken()
-	if err != nil {
-		return nil, err
-	}
-	tokenSource := c.config.TokenSource(ctx, token)
-	freshToken, err := tokenSource.Token()
-	if err != nil {
-		return nil, fmt.Errorf("làm mới phiên Google: %w", err)
-	}
-	if freshToken.AccessToken != token.AccessToken || !freshToken.Expiry.Equal(token.Expiry) {
-		_ = c.saveToken(freshToken)
-	}
-	httpClient := oauth2.NewClient(ctx, tokenSource)
-	filter := fmt.Sprintf("start_time >= %q", since.UTC().Format(time.RFC3339))
-	var result []application.ImportedMeeting
-	pageToken := ""
-	for {
-		var page ListConferenceRecordsResponse
-		values := url.Values{"filter": []string{filter}, "pageSize": []string{"100"}}
-		if pageToken != "" {
-			values.Set("pageToken", pageToken)
-		}
-		if err := c.getJSON(ctx, httpClient, "https://meet.googleapis.com/v2/conferenceRecords?"+values.Encode(), &page); err != nil {
-			return nil, err
-		}
-		for _, record := range page.ConferenceRecords {
-			startedAt, err := time.Parse(time.RFC3339, record.StartTime)
-			if err != nil {
-				return nil, fmt.Errorf("thời gian conference record không hợp lệ: %w", err)
-			}
-			endedAt, _ := time.Parse(time.RFC3339, record.EndTime)
-			participants, err := c.listParticipants(ctx, httpClient, record.Name, startedAt, endedAt)
-			if err != nil {
-				return nil, fmt.Errorf("đọc người tham gia %s: %w", record.Name, err)
-			}
-			result = append(result, application.ImportedMeeting{
-				GoogleRecordName: trimResourcePrefix(record.Name, "conferenceRecords/"),
-				GoogleSpaceName:  trimResourcePrefix(record.Space, "spaces/"),
-				StartedAt:        startedAt,
-				EndedAt:          endedAt,
-				Participants:     participants,
-			})
-		}
-		pageToken = page.NextPageToken
-		if pageToken == "" {
-			return result, nil
-		}
-	}
-}
-
-func (c *Client) listParticipants(ctx context.Context, client *http.Client, recordName string, meetingStart, meetingEnd time.Time) ([]domain.Participant, error) {
-	var source []Participant
-	pageToken := ""
-	for {
-		var page ListParticipantsResponse
-		values := url.Values{"pageSize": []string{"250"}}
-		if pageToken != "" {
-			values.Set("pageToken", pageToken)
-		}
-		endpoint := "https://meet.googleapis.com/v2/" + recordName + "/participants?" + values.Encode()
-		if err := c.getJSON(ctx, client, endpoint, &page); err != nil {
-			return nil, err
-		}
-		source = append(source, page.Participants...)
-		pageToken = page.NextPageToken
-		if pageToken == "" {
-			break
-		}
-	}
-
-	result := make([]domain.Participant, 0, len(source))
-	for _, person := range source {
-		value, err := c.readSessions(ctx, client, person, meetingStart, meetingEnd)
-		if err != nil {
-			return nil, err
-		}
-		if !value.JoinedAt.IsZero() {
-			result = append(result, value)
-		}
-	}
-	return result, nil
-}
-
-func (c *Client) readSessions(ctx context.Context, client *http.Client, person Participant, meetingStart, meetingEnd time.Time) (domain.Participant, error) {
-	result := domain.Participant{
-		GoogleParticipantName: trimResourcePrefix(person.Name, "conferenceRecords/"),
-		GoogleUserName:        person.googleUserName(),
-		DisplayName:           person.displayName(),
-	}
-	var intervals []timeInterval
-	pageToken := ""
-	for {
-		var page ListParticipantSessionsResponse
-		values := url.Values{"pageSize": []string{"250"}}
-		if pageToken != "" {
-			values.Set("pageToken", pageToken)
-		}
-		endpoint := "https://meet.googleapis.com/v2/" + person.Name + "/participantSessions?" + values.Encode()
-		if err := c.getJSON(ctx, client, endpoint, &page); err != nil {
-			return result, err
-		}
-		for _, participantSession := range page.ParticipantSessions {
-			start, err := time.Parse(time.RFC3339, participantSession.StartTime)
-			if err != nil {
-				continue
-			}
-			end, err := time.Parse(time.RFC3339, participantSession.EndTime)
-			if err != nil {
-				end = meetingEnd
-				if end.IsZero() {
-					end = time.Now().UTC()
-				}
-			}
-			intervals = append(intervals, timeInterval{start: start, end: end})
-		}
-		pageToken = page.NextPageToken
-		if pageToken == "" {
-			result.JoinedAt, result.LeftAt, result.DurationMinutes = mergedDuration(intervals, meetingStart, meetingEnd)
-			return result, nil
-		}
-	}
-}
-
-func trimResourcePrefix(value, prefix string) string {
-	return strings.TrimPrefix(value, prefix)
-}
-
-type timeInterval struct{ start, end time.Time }
-
-func mergedDuration(intervals []timeInterval, meetingStart, meetingEnd time.Time) (time.Time, time.Time, int64) {
-	valid := make([]timeInterval, 0, len(intervals))
-	for _, interval := range intervals {
-		if interval.start.Before(meetingStart) {
-			interval.start = meetingStart
-		}
-		if !meetingEnd.IsZero() && interval.end.After(meetingEnd) {
-			interval.end = meetingEnd
-		}
-		if interval.end.After(interval.start) {
-			valid = append(valid, interval)
-		}
-	}
-	if len(valid) == 0 {
-		return time.Time{}, time.Time{}, 0
-	}
-	sort.Slice(valid, func(i, j int) bool { return valid[i].start.Before(valid[j].start) })
-	joinedAt := valid[0].start
-	currentEnd := valid[0].end
-	leftAt := currentEnd
-	var total time.Duration
-	for _, interval := range valid[1:] {
-		if !interval.start.After(currentEnd) {
-			if interval.end.After(currentEnd) {
-				currentEnd = interval.end
-			}
-			if currentEnd.After(leftAt) {
-				leftAt = currentEnd
-			}
-			continue
-		}
-		total += currentEnd.Sub(joinedAt)
-		joinedAt = interval.start
-		currentEnd = interval.end
-		if currentEnd.After(leftAt) {
-			leftAt = currentEnd
-		}
-	}
-	total += currentEnd.Sub(joinedAt)
-	return valid[0].start, leftAt, int64(total.Minutes())
-}
-
-func (c *Client) getJSON(ctx context.Context, client *http.Client, endpoint string, target any) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return err
-	}
-	response, err := client.Do(request)
-	if err != nil {
-		return err
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode > 299 {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
-		return fmt.Errorf("Google Meet trả về %s: %s", response.Status, strings.TrimSpace(string(body)))
-	}
-	return json.NewDecoder(response.Body).Decode(target)
-}
-
-func (c *Client) readToken() (*oauth2.Token, error) {
-	file, err := os.Open(c.tokenPath)
-	if err != nil {
-		return nil, errors.New("hãy liên kết tài khoản Google trước")
-	}
-	defer file.Close()
-	var token oauth2.Token
-	if err := json.NewDecoder(file).Decode(&token); err != nil {
-		return nil, fmt.Errorf("đọc token: %w", err)
-	}
-	return &token, nil
-}
-
-func (c *Client) saveToken(token *oauth2.Token) error {
 	file, err := os.OpenFile(c.tokenPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
@@ -272,63 +63,261 @@ func (c *Client) saveToken(token *oauth2.Token) error {
 	return json.NewEncoder(file).Encode(token)
 }
 
-type ConferenceRecord struct {
-	Name      string `json:"name"`
-	StartTime string `json:"startTime"`
-	EndTime   string `json:"endTime"`
-	Space     string `json:"space"`
-}
-
-type ListConferenceRecordsResponse struct {
-	ConferenceRecords []ConferenceRecord `json:"conferenceRecords"`
-	NextPageToken     string             `json:"nextPageToken"`
-}
-
-type SignedInUser struct {
-	User        string `json:"user"`
-	DisplayName string `json:"displayName"`
-}
-
-type AnonymousUser struct {
-	DisplayName string `json:"displayName"`
-}
-
-type Participant struct {
-	Name          string         `json:"name"`
-	SignedInUser  *SignedInUser  `json:"signedInUser"`
-	AnonymousUser *AnonymousUser `json:"anonymousUser"`
-}
-
-func (p Participant) displayName() string {
-	if p.SignedInUser != nil && p.SignedInUser.DisplayName != "" {
-		return p.SignedInUser.DisplayName
+func (c *Client) Disconnect() error {
+	if err := os.Remove(c.tokenPath); err != nil && !os.IsNotExist(err) {
+		return err
 	}
-	if p.AnonymousUser != nil && p.AnonymousUser.DisplayName != "" {
-		return p.AnonymousUser.DisplayName
+	return nil
+}
+
+func (c *Client) getHTTPClient(ctx context.Context) (*http.Client, error) {
+	file, err := os.Open(c.tokenPath)
+	if err != nil {
+		return nil, errors.New("hãy liên kết tài khoản Google trước")
 	}
-	return "Khách ẩn danh"
-}
+	defer file.Close()
 
-func (p Participant) googleUserName() string {
-	if p.SignedInUser == nil {
-		return ""
+	var token oauth2.Token
+	if err := json.NewDecoder(file).Decode(&token); err != nil {
+		return nil, fmt.Errorf("đọc token: %w", err)
 	}
-	return p.SignedInUser.User
+
+	tokenSource := c.config.TokenSource(ctx, &token)
+	freshToken, err := tokenSource.Token()
+	if err != nil {
+		// Token bị Google thu hồi hoặc refresh thất bại -> Tự động xóa file rác
+		_ = c.Disconnect()
+		return nil, errors.New("AUTH_EXPIRED: phiên đăng nhập Google đã hết hạn")
+	}
+	if freshToken.AccessToken == token.AccessToken {
+		return c.config.Client(ctx, &token), nil
+	}
+	err = c.saveToken(freshToken)
+	if err!=nil{
+		return nil,err
+	}
+	return c.config.Client(ctx, freshToken), nil
+}
+func (c *Client) saveToken(token *oauth2.Token) error {
+	data, err := json.Marshal(token) // hoặc json.MarshalIndent(token, "", "  ") để JSON thụt lề đẹp mắt
+	if err != nil {
+		return err
+	}
+	// Tự động tạo và ghi đè file với quyền bảo mật 0600
+	return os.WriteFile(c.tokenPath, data, 0600)
+}
+// ==================== IMPLEMENT ListMeetRepoForSync ====================
+
+func (c *Client) ListMeetingsFrom(ctx context.Context, fromTime time.Time) ([]domain.Meeting, error) {
+	client, err := c.getHTTPClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 1. CHIỀU ĐI: Nhận giờ UTC+7 từ Application -> Đổi sang UTC để gửi cho Google
+	filter := fmt.Sprintf("start_time >= %q", fromTime.UTC().Format(time.RFC3339))
+	var meetings []domain.Meeting
+	pageToken := ""
+
+	for {
+		endpoint := fmt.Sprintf("%s/conferenceRecords?filter=%s&pageSize=100", meetAPIBase, url.QueryEscape(filter))
+		if pageToken != "" {
+			endpoint += "&pageToken=" + pageToken
+		}
+
+		var page struct {
+			Records []struct {
+				Name      string `json:"name"`
+				StartTime string `json:"startTime"`
+				EndTime   string `json:"endTime"`
+				Space     string `json:"space"`
+			} `json:"conferenceRecords"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+
+		if err := c.getJSON(ctx, client, endpoint, &page); err != nil {
+			return nil, err
+		}
+
+		for _, rec := range page.Records {
+			// 2. CHIỀU VỀ: Nhận UTC từ Google -> Đổi ngay sang UTC+7 trước khi tạo domain.Meeting
+			startedAtUTC, err := time.Parse(time.RFC3339, rec.StartTime)
+			if err != nil {
+				continue
+			}
+			startedAtVN := startedAtUTC.In(vnLocation)
+
+			var endedAtVN time.Time
+			if rec.EndTime != "" {
+				if t, err := time.Parse(time.RFC3339, rec.EndTime); err == nil {
+					endedAtVN = t.In(vnLocation)
+				}
+			}
+
+			participants, err := c.listParticipants(ctx, client, rec.Name, startedAtVN, endedAtVN)
+			if err != nil {
+				return nil, fmt.Errorf("lấy người tham gia %s: %w", rec.Name, err)
+			}
+
+			meetings = append(meetings, domain.Meeting{
+				ID:           strings.TrimPrefix(rec.Name, "conferenceRecords/"),
+				Class:        strings.TrimPrefix(rec.Space, "spaces/"),
+				StartedAt:    startedAtVN, // Trả về giờ VN thuần túy
+				EndedAt:      endedAtVN,   // Trả về giờ VN thuần túy
+				Participants: participants,
+			})
+		}
+
+		pageToken = page.NextPageToken
+		if pageToken == "" {
+			break
+		}
+	}
+
+	return meetings, nil
 }
 
-type ListParticipantsResponse struct {
-	Participants  []Participant `json:"participants"`
-	NextPageToken string        `json:"nextPageToken"`
-	TotalSize     int           `json:"totalSize"`
+func (c *Client) listParticipants(ctx context.Context, client *http.Client, recordName string, meetStartVN, meetEndVN time.Time) ([]domain.Participant, error) {
+	var participants []domain.Participant
+	pageToken := ""
+
+	for {
+		endpoint := fmt.Sprintf("%s/%s/participants?pageSize=100", meetAPIBase, recordName)
+		if pageToken != "" {
+			endpoint += "&pageToken=" + pageToken
+		}
+
+		var page struct {
+			Participants []struct {
+				Name         string `json:"name"`
+				SignedInUser *struct {
+					DisplayName string `json:"displayName"`
+				} `json:"signedInUser"`
+				AnonymousUser *struct {
+					DisplayName string `json:"displayName"`
+				} `json:"anonymousUser"`
+			} `json:"participants"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+
+		if err := c.getJSON(ctx, client, endpoint, &page); err != nil {
+			return nil, err
+		}
+
+		for _, p := range page.Participants {
+			displayName := "Khách ẩn danh"
+			if p.SignedInUser != nil && p.SignedInUser.DisplayName != "" {
+				displayName = p.SignedInUser.DisplayName
+			} else if p.AnonymousUser != nil && p.AnonymousUser.DisplayName != "" {
+				displayName = p.AnonymousUser.DisplayName
+			}
+
+			firstJoinVN, lastLeaveVN, duration := c.readSessions(ctx, client, p.Name, meetStartVN, meetEndVN)
+			if !firstJoinVN.IsZero() {
+				participants = append(participants, domain.Participant{
+					Name:          displayName,
+					FirstJoinedAt: firstJoinVN, // Giờ VN
+					LastLeftAt:    lastLeaveVN,  // Giờ VN
+					Duration:      duration,
+				})
+			}
+		}
+
+		pageToken = page.NextPageToken
+		if pageToken == "" {
+			break
+		}
+	}
+
+	return participants, nil
 }
 
-type ParticipantSession struct {
-	Name      string `json:"name"`
-	StartTime string `json:"startTime"`
-	EndTime   string `json:"endTime"`
+func (c *Client) readSessions(ctx context.Context, client *http.Client, participantName string, meetStartVN, meetEndVN time.Time) (time.Time, time.Time, int) {
+	var intervals [][2]time.Time
+	pageToken := ""
+
+	for {
+		endpoint := fmt.Sprintf("%s/%s/participantSessions?pageSize=100", meetAPIBase, participantName)
+		if pageToken != "" {
+			endpoint += "&pageToken=" + pageToken
+		}
+
+		var page struct {
+			Sessions []struct {
+				StartTime string `json:"startTime"`
+				EndTime   string `json:"endTime"`
+			} `json:"participantSessions"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+
+		if err := c.getJSON(ctx, client, endpoint, &page); err != nil || len(page.Sessions) == 0 {
+			break
+		}
+
+		for _, s := range page.Sessions {
+			startUTC, err1 := time.Parse(time.RFC3339, s.StartTime)
+			endUTC, err2 := time.Parse(time.RFC3339, s.EndTime)
+			if err1 != nil {
+				continue
+			}
+
+			// Chuyển session về giờ VN
+			startVN := startUTC.In(vnLocation)
+			var endVN time.Time
+			if err2 == nil {
+				endVN = endUTC.In(vnLocation)
+			} else {
+				endVN = meetEndVN
+				if endVN.IsZero() {
+					endVN = time.Now().In(vnLocation)
+				}
+			}
+
+			intervals = append(intervals, [2]time.Time{startVN, endVN})
+		}
+
+		pageToken = page.NextPageToken
+		if pageToken == "" {
+			break
+		}
+	}
+
+	return calculateDuration(intervals, meetStartVN, meetEndVN)
 }
 
-type ListParticipantSessionsResponse struct {
-	ParticipantSessions []ParticipantSession `json:"participantSessions"`
-	NextPageToken       string               `json:"nextPageToken"`
+func (c *Client) getJSON(ctx context.Context, client *http.Client, endpoint string, target any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return err
+	}
+	res, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode < 200 || res.StatusCode > 299 {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
+		return fmt.Errorf("Google Meet API (%d): %s", res.StatusCode, string(body))
+	}
+	return json.NewDecoder(res.Body).Decode(target)
+}
+
+func calculateDuration(intervals [][2]time.Time, meetStart, meetEnd time.Time) (time.Time, time.Time, int) {
+	if len(intervals) == 0 {
+		return time.Time{}, time.Time{}, 0
+	}
+	sort.Slice(intervals, func(i, j int) bool { return intervals[i][0].Before(intervals[j][0]) })
+
+	firstJoin := intervals[0][0]
+	lastLeave := intervals[0][1]
+	var total time.Duration
+
+	for _, it := range intervals {
+		if it[1].After(lastLeave) {
+			lastLeave = it[1]
+		}
+		total += it[1].Sub(it[0])
+	}
+	return firstJoin, lastLeave, int(total.Minutes())
 }

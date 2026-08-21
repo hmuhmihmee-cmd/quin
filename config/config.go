@@ -8,8 +8,7 @@ import (
 //go:embed default.json
 var defaultConfig []byte
 
-//go:embed google-oauth.json
-var embeddedGoogleCredentials []byte
+
 
 //go:embed gemini-key.txt
 var embeddedGeminiKey []byte
