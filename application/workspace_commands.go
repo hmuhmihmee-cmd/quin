@@ -26,8 +26,11 @@ type ChapterTarget struct {
 }
 
 type PublishResult struct {
-	PageID      string `json:"page_id"`
-	WorkspaceID string `json:"workspace_id"`
+	PageID            string `json:"page_id"`
+	WorkspaceID       string `json:"workspace_id"`
+	PageWebURL        string `json:"page_web_url"` // Giữ tương thích: URL trang học sinh.
+	StudentPageWebURL string `json:"student_page_web_url"`
+	TeacherPageWebURL string `json:"teacher_page_web_url"`
 }
 
 type WorkspaceGateway interface {
@@ -36,7 +39,7 @@ type WorkspaceGateway interface {
 		target WorkspaceTarget,
 		audience domain.Audience,
 		lesson domain.Lesson,
-	) (pageID string, workspaceID string, err error)
+	) (PublishResult, error)
 }
 
 type StudentRepository interface {
@@ -74,45 +77,45 @@ func NewWorkspaceCommand(
 	}
 }
 
-func (c *WorkspaceCommand) PublishLesson(ctx context.Context, cmd PublishLessonCommand) error {
+func (c *WorkspaceCommand) PublishLesson(ctx context.Context, cmd PublishLessonCommand) (*PublishResult, error) {
 	// 1. VALIDATE CƠ BẢN
 	if cmd.DraftID <= 0 {
-		return errors.New("bản nháp không hợp lệ")
+		return nil, errors.New("bản nháp không hợp lệ")
 	}
 	if cmd.StudentID <= 0 {
-		return errors.New("mã học sinh không hợp lệ")
+		return nil, errors.New("mã học sinh không hợp lệ")
 	}
 	cmd.PageName = strings.TrimSpace(cmd.PageName)
 	if cmd.PageName == "" {
-		return errors.New("tên trang (page_name) không được để trống")
+		return nil, errors.New("tên trang (page_name) không được để trống")
 	}
 
 	// Chuẩn hóa & validate Chapter của Học sinh
 	cmd.StudentChapter.ChapterID = normalizeOptionalString(cmd.StudentChapter.ChapterID)
 	cmd.StudentChapter.ChapterName = normalizeOptionalString(cmd.StudentChapter.ChapterName)
 	if cmd.StudentChapter.ChapterID == nil && cmd.StudentChapter.ChapterName == nil {
-		return errors.New("cần ít nhất chapter_id hoặc chapter_name cho vở học sinh")
+		return nil, errors.New("cần ít nhất chapter_id hoặc chapter_name cho vở học sinh")
 	}
 
 	// Chuẩn hóa & validate Chapter của Giáo viên
 	cmd.TeacherChapter.ChapterID = normalizeOptionalString(cmd.TeacherChapter.ChapterID)
 	cmd.TeacherChapter.ChapterName = normalizeOptionalString(cmd.TeacherChapter.ChapterName)
 	if cmd.TeacherChapter.ChapterID == nil && cmd.TeacherChapter.ChapterName == nil {
-		return errors.New("cần ít nhất chapter_id hoặc chapter_name cho vở giáo viên")
+		return nil, errors.New("cần ít nhất chapter_id hoặc chapter_name cho vở giáo viên")
 	}
 
 	// 2. LẤY ENTITY TỪ DATABASE
 	student, err := c.studentRepo.GetStudent(ctx, cmd.StudentID)
 	if err != nil {
-		return fmt.Errorf("không tìm thấy học sinh ID %d: %w", cmd.StudentID, err)
+		return nil, fmt.Errorf("không tìm thấy học sinh ID %d: %w", cmd.StudentID, err)
 	}
 
 	draft, err := c.draftRepo.GetByID(ctx, cmd.DraftID)
 	if err != nil {
-		return fmt.Errorf("không tìm thấy bài giảng ID %d: %w", cmd.DraftID, err)
+		return nil, fmt.Errorf("không tìm thấy bài giảng ID %d: %w", cmd.DraftID, err)
 	}
 	if draft.LessonData == nil {
-		return errors.New("bài giảng chưa có dữ liệu cấu trúc hoàn chỉnh")
+		return nil, errors.New("bài giảng chưa có dữ liệu cấu trúc hoàn chỉnh")
 	}
 
 	// 3. THIẾT LẬP TARGET CHO HỌC SINH (_HS)
@@ -127,9 +130,11 @@ func (c *WorkspaceCommand) PublishLesson(ctx context.Context, cmd PublishLessonC
 		studentTarget.WorkspaceID = student.StudentWorkspaceID
 	} else {
 		if cmd.StudentChapter.ChapterName == nil {
-			return errors.New("vở học sinh chưa được tạo nên cần student_chapter.chapter_name")
+			return nil, errors.New("vở học sinh chưa được tạo nên cần student_chapter.chapter_name")
 		}
-		notebookName := fmt.Sprintf("%s_%s_HS", student.Name, student.Class)
+		// Tên notebook chỉ được dùng khi tạo lần đầu. Sau đó WorkspaceID được lưu
+		// và luôn được tái sử dụng, nên đổi tên học sinh sẽ không làm đổi notebook.
+		notebookName := fmt.Sprintf("%s_HS", student.Name)
 		studentTarget.WorkspaceName = &notebookName
 		studentTarget.ChapterID = nil
 		isNewStudentWorkspace = true
@@ -147,33 +152,35 @@ func (c *WorkspaceCommand) PublishLesson(ctx context.Context, cmd PublishLessonC
 		teacherTarget.WorkspaceID = student.TeacherWorkspaceID
 	} else {
 		if cmd.TeacherChapter.ChapterName == nil {
-			return errors.New("vở giáo viên chưa được tạo nên cần teacher_chapter.chapter_name")
+			return nil, errors.New("vở giáo viên chưa được tạo nên cần teacher_chapter.chapter_name")
 		}
-		notebookName := fmt.Sprintf("%s_%s_GV", student.Name, student.Class)
+		notebookName := fmt.Sprintf("%s_GV", student.Name)
 		teacherTarget.WorkspaceName = &notebookName
 		teacherTarget.ChapterID = nil
 		isNewTeacherWorkspace = true
 	}
 
 	// 5. GỌI GATEWAY ĐẨY BÀI CHO GIÁO VIÊN
-	_, teacherWorkspaceID, err := c.gateway.PublishSession(ctx, teacherTarget, domain.AudienceTeacher, *draft.LessonData)
+	teacherResult, err := c.gateway.PublishSession(ctx, teacherTarget, domain.AudienceTeacher, *draft.LessonData)
 	if err != nil {
-		return fmt.Errorf("lỗi đẩy bài vào vở giáo viên: %w", err)
+		fmt.Println(fmt.Errorf("lỗi đẩy bài vào vở giáo viên: %w", err))
+		return nil, fmt.Errorf("lỗi đẩy bài vào vở giáo viên: %w", err)
 	}
 
 	// 6. GỌI GATEWAY ĐẨY BÀI CHO HỌC SINH
-	studentPageID, studentWorkspaceID, err := c.gateway.PublishSession(ctx, studentTarget, domain.AudienceStudent, *draft.LessonData)
+	studentResult, err := c.gateway.PublishSession(ctx, studentTarget, domain.AudienceStudent, *draft.LessonData)
 	if err != nil {
-		return fmt.Errorf("lỗi đẩy bài vào vở học sinh: %w", err)
+		fmt.Println(fmt.Errorf("lỗi đẩy bài vào vở học sinh: %w", err))
+		return nil, fmt.Errorf("lỗi đẩy bài vào vở học sinh: %w", err)
 	}
-
+	fmt.Printf("Đẩy lên OneNote thành công - pageid = %s / notebookid = %s\n", studentResult.PageID, studentResult.WorkspaceID)
 	// 7. ĐỒNG BỘ TỪ TỪ (LAZY SYNC) LƯU NOTEBOOK ID VÀO DB
 	if isNewStudentWorkspace || isNewTeacherWorkspace {
 		if isNewStudentWorkspace {
-			student.StudentWorkspaceID = &studentWorkspaceID
+			student.StudentWorkspaceID = &studentResult.WorkspaceID
 		}
 		if isNewTeacherWorkspace {
-			student.TeacherWorkspaceID = &teacherWorkspaceID
+			student.TeacherWorkspaceID = &teacherResult.WorkspaceID
 		}
 
 		if err := c.studentRepo.UpdateStudent(ctx, student); err != nil {
@@ -188,20 +195,24 @@ func (c *WorkspaceCommand) PublishLesson(ctx context.Context, cmd PublishLessonC
 	}
 
 	assignment := domain.Assignment{
-		Title:        cmd.PageName,
-		Type:         domain.AssignmentTypeNormal,
-		Status:       domain.AssignmentStatusPending,
-		AssignedAt:   time.Now().UTC(),
-		Assignee:     student,
-		TargetPageID: studentPageID,
-		Items:        items,
+		Title:             cmd.PageName,
+		Type:              domain.AssignmentTypeNormal,
+		Status:            domain.AssignmentStatusPending,
+		AssignedAt:        time.Now().UTC(),
+		Assignee:          student,
+		TargetPageID:      studentResult.PageID,
+		StudentPageWebURL: studentResult.PageWebURL,
+		TeacherPageWebURL: teacherResult.PageWebURL,
+		Items:             items,
 	}
 
 	if err := c.assignmentRepo.Save(ctx, &assignment); err != nil {
-		return fmt.Errorf("đã đẩy lên OneNote nhưng lỗi lưu Assignment vào Database: %w", err)
+		return nil, fmt.Errorf("đã đẩy lên OneNote nhưng lỗi lưu Assignment vào Database: %w", err)
 	}
 
-	return nil
+	studentResult.StudentPageWebURL = studentResult.PageWebURL
+	studentResult.TeacherPageWebURL = teacherResult.PageWebURL
+	return &studentResult, nil
 }
 
 func normalizeOptionalString(value *string) *string {

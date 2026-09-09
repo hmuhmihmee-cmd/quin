@@ -13,16 +13,18 @@ type GradingPageFilter struct {
 }
 
 type AssignmentSummary struct {
-	AssignmentID int                     `json:"assignment_id"`
-	PageID       string                  `json:"page_id"`
-	Title        string                  `json:"title"`
-	StudentID    int                     `json:"student_id"`
-	StudentName  string                  `json:"student_name"`
-	Status       domain.AssignmentStatus `json:"status"`
-	AssignedAt   time.Time               `json:"assigned_at"`
-	CorrectCount int                     `json:"correct_count"`
-	GradedCount  int                     `json:"graded_count"`
-	TotalCount   int                     `json:"total_count"`
+	AssignmentID      int                     `json:"assignment_id"`
+	PageID            string                  `json:"page_id"`
+	StudentPageWebURL string                  `json:"student_page_web_url"`
+	TeacherPageWebURL string                  `json:"teacher_page_web_url"`
+	Title             string                  `json:"title"`
+	StudentID         int                     `json:"student_id"`
+	StudentName       string                  `json:"student_name"`
+	Status            domain.AssignmentStatus `json:"status"`
+	AssignedAt        time.Time               `json:"assigned_at"`
+	CorrectCount      int                     `json:"correct_count"`
+	GradedCount       int                     `json:"graded_count"`
+	TotalCount        int                     `json:"total_count"`
 }
 
 type StudentMistakeGroup struct {

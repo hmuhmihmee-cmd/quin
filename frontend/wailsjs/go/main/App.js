@@ -78,6 +78,10 @@ export function ListWorkspaces() {
   return window['go']['main']['App']['ListWorkspaces']();
 }
 
+export function OpenExternalURL(arg1) {
+  return window['go']['main']['App']['OpenExternalURL'](arg1);
+}
+
 export function PublishLessonToOneNote(arg1) {
   return window['go']['main']['App']['PublishLessonToOneNote'](arg1);
 }

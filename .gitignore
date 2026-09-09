@@ -15,3 +15,6 @@ bin/
 
 # Bỏ qua file config chứa secret
 config/microsoft-oauth.json
+
+# Snapshot tạm bài làm OneNote để đối chiếu ảnh/text trước khi gửi Gemini
+/debug/onenote-answer-snapshots/

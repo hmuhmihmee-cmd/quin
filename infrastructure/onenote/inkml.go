@@ -1,14 +1,19 @@
+// File: infrastructure/onenote/ink.go
 package onenote
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"image/jpeg"
 	"io"
 	"math"
-	"sort"
+	"mime"
+	"mime/multipart"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -16,304 +21,198 @@ import (
 )
 
 type inkPoint struct {
-	X float64
-	Y float64
+	X, Y float64
 }
 
 type inkTrace struct {
-	Points []inkPoint
-	MinX   float64
-	MinY   float64
-	MaxX   float64
-	MaxY   float64
+	Points                 []inkPoint
+	MinX, MinY, MaxX, MaxY float64
 }
 
-type inkExerciseBoundary struct {
-	ExerciseID int
-	Y          float64
-}
+func (c *Client) fetchPageHTMLAndInk(ctx context.Context, client *http.Client, pageID string) (string, []byte, error) {
+	endpoint := fmt.Sprintf("%s/pages/%s/content?includeIDs=true&includeInkML=true", graphAPIBase, url.PathEscape(pageID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	req.Header.Set("Accept", "multipart/form-data, application/inkml+xml, text/html, application/xhtml+xml")
 
-type inkTraceLayout struct {
-	Stride int
-	XIndex int
-	YIndex int
-}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", nil, fmt.Errorf("lấy nội dung trang OneNote: %w", err)
+	}
+	defer resp.Body.Close()
 
-// parseInkMLTraces dùng XML token stream để lấy cả trace trực tiếp lẫn trace
-// nằm trong traceGroup. Namespace prefix của InkML không ảnh hưởng vì Go so
-// khớp theo local name.
-func parseInkMLTraces(data []byte) ([]inkTrace, error) {
-	layout := parseInkTraceLayout(data)
-	decoder := xml.NewDecoder(bytes.NewReader(data))
-	traces := make([]inkTrace, 0)
-	for {
-		token, err := decoder.Token()
-		if err != nil {
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", nil, fmt.Errorf("OneNote API lỗi (%d): %s", resp.StatusCode, string(body))
+	}
+
+	mediaType, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+	if err == nil && strings.HasPrefix(strings.ToLower(mediaType), "multipart/") {
+		reader := multipart.NewReader(resp.Body, params["boundary"])
+		var htmlContent string
+		var inkContent []byte
+
+		for {
+			part, err := reader.NextPart()
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			return nil, fmt.Errorf("parse InkML: %w", err)
+			if err != nil {
+				break
+			}
+
+			partType, _, _ := mime.ParseMediaType(part.Header.Get("Content-Type"))
+			formName := strings.ToLower(part.FormName())
+			data, _ := io.ReadAll(part)
+			part.Close()
+
+			if formName == "presentation" || strings.Contains(partType, "html") {
+				htmlContent = string(data)
+			} else if formName == "inkml" || strings.Contains(partType, "inkml") || strings.Contains(partType, "xml") {
+				inkContent = data
+			}
 		}
-		start, ok := token.(xml.StartElement)
-		if !ok || start.Name.Local != "trace" {
+		return htmlContent, inkContent, nil
+	}
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	return string(body), nil, nil
+}
+// RenderInkMLToJPEG tạo ra 1 bức ảnh dài toàn bộ nét vẽ tay của học sinh trên nền trắng
+func RenderInkMLToJPEG(inkXML []byte) ([]byte, error) {
+	traces, err := parseInkTraces(inkXML)
+	if err != nil || len(traces) == 0 {
+		return nil, err
+	}
+
+	minX, minY := math.MaxFloat64, math.MaxFloat64
+	maxX, maxY := -math.MaxFloat64, -math.MaxFloat64
+	for _, t := range traces {
+		minX = math.Min(minX, t.MinX)
+		minY = math.Min(minY, t.MinY)
+		maxX = math.Max(maxX, t.MaxX)
+		maxY = math.Max(maxY, t.MaxY)
+	}
+
+	padding := 30.0
+	contentWidth := (maxX - minX) / 26.4583  // Chuyển Himetric sang Pixel
+	contentHeight := (maxY - minY) / 26.4583
+
+	// Chiều rộng cố định khổ ~850px chuẩn đọc tài liệu
+	targetWidth := 850.0
+	scale := 1.0
+	if contentWidth > 0 {
+		scale = targetWidth / contentWidth
+		if scale > 1.2 {
+			scale = 1.2
+		}
+	}
+
+	width := int(math.Ceil(contentWidth*scale + padding*2))
+	height := int(math.Ceil(contentHeight*scale + padding*2))
+
+	if width < 300 { width = 300 }
+	if height < 200 { height = 200 }
+
+	dc := gg.NewContext(width, height)
+	dc.SetRGB(1, 1, 1) // Nền trắng tờ giấy
+	dc.Clear()
+	dc.SetRGB(0, 0.08, 0.35) // Mực viết xanh đậm OneNote (#00145a)
+	dc.SetLineWidth(2.4)     // Độ dày nét bút vừa vặn, không bị mảnh
+	dc.SetLineCap(gg.LineCapRound)
+	dc.SetLineJoin(gg.LineJoinRound)
+
+	for _, t := range traces {
+		if len(t.Points) == 0 {
 			continue
 		}
-		var raw string
-		if err := decoder.DecodeElement(&raw, &start); err != nil {
-			return nil, fmt.Errorf("parse InkML trace: %w", err)
+		startX := ((t.Points[0].X-minX)/26.4583)*scale + padding
+		startY := ((t.Points[0].Y-minY)/26.4583)*scale + padding
+		dc.MoveTo(startX, startY)
+
+		for _, p := range t.Points[1:] {
+			curX := ((p.X-minX)/26.4583)*scale + padding
+			curY := ((p.Y-minY)/26.4583)*scale + padding
+			dc.LineTo(curX, curY)
 		}
-		points := parseInkTracePointsWithLayout(raw, layout)
-		if len(points) == 0 {
-			continue
+		if len(t.Points) == 1 {
+			dc.DrawCircle(startX, startY, 1.5)
+			dc.Fill()
+		} else {
+			dc.Stroke()
 		}
-		trace := inkTrace{
-			Points: points,
-			MinX:   math.MaxFloat64,
-			MinY:   math.MaxFloat64,
-			MaxX:   -math.MaxFloat64,
-			MaxY:   -math.MaxFloat64,
+	}
+
+	var buf bytes.Buffer
+	err = jpeg.Encode(&buf, dc.Image(), &jpeg.Options{Quality: 90})
+	return buf.Bytes(), err
+}
+
+func parseInkTraces(data []byte) ([]inkTrace, error) {
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	var traces []inkTrace
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
 		}
-		for _, point := range points {
-			trace.MinX = math.Min(trace.MinX, point.X)
-			trace.MinY = math.Min(trace.MinY, point.Y)
-			trace.MaxX = math.Max(trace.MaxX, point.X)
-			trace.MaxY = math.Max(trace.MaxY, point.Y)
+		start, ok := tok.(xml.StartElement)
+		if ok && start.Name.Local == "trace" {
+			var raw string
+			_ = decoder.DecodeElement(&raw, &start)
+			pts := parseTracePoints(raw)
+			if len(pts) > 0 {
+				t := inkTrace{
+					Points: pts,
+					MinX:   math.MaxFloat64, MinY: math.MaxFloat64,
+					MaxX:   -math.MaxFloat64, MaxY: -math.MaxFloat64,
+				}
+				for _, p := range pts {
+					t.MinX = math.Min(t.MinX, p.X)
+					t.MinY = math.Min(t.MinY, p.Y)
+					t.MaxX = math.Max(t.MaxX, p.X)
+					t.MaxY = math.Max(t.MaxY, p.Y)
+				}
+				traces = append(traces, t)
+			}
 		}
-		traces = append(traces, trace)
 	}
 	return traces, nil
 }
 
-func parseInkTracePoints(value string) []inkPoint {
-	return parseInkTracePointsWithLayout(value, inkTraceLayout{})
-}
-
-func parseInkTraceLayout(data []byte) inkTraceLayout {
-	decoder := xml.NewDecoder(bytes.NewReader(data))
-	for {
-		token, err := decoder.Token()
-		if err != nil {
-			return inkTraceLayout{}
-		}
-		start, ok := token.(xml.StartElement)
-		if !ok || start.Name.Local != "traceFormat" {
-			continue
-		}
-		channels := make([]string, 0, 3)
-		depth := 1
-		for depth > 0 {
-			token, err = decoder.Token()
-			if err != nil {
-				return inkTraceLayout{}
-			}
-			switch element := token.(type) {
-			case xml.StartElement:
-				depth++
-				if element.Name.Local == "channel" {
-					for _, attribute := range element.Attr {
-						if attribute.Name.Local == "name" {
-							channels = append(channels, strings.ToUpper(strings.TrimSpace(attribute.Value)))
-							break
-						}
-					}
-				}
-			case xml.EndElement:
-				depth--
-			}
-		}
-		xIndex, yIndex := -1, -1
-		for index, channel := range channels {
-			switch channel {
-			case "X":
-				xIndex = index
-			case "Y":
-				yIndex = index
-			}
-		}
-		if xIndex >= 0 && yIndex >= 0 {
-			return inkTraceLayout{Stride: len(channels), XIndex: xIndex, YIndex: yIndex}
-		}
-	}
-}
-
-func parseInkTracePointsWithLayout(value string, layout inkTraceLayout) []inkPoint {
-	value = strings.TrimSpace(value)
-	if value == "" {
+func parseTracePoints(raw string) []inkPoint {
+	clean := strings.NewReplacer(",", " ", ";", " ", "\n", " ", "\r", " ", "\t", " ").Replace(strings.TrimSpace(raw))
+	fields := strings.Fields(clean)
+	if len(fields) < 2 {
 		return nil
 	}
 
-	// OneNote có thể phân tách từng điểm bằng dấu phẩy, chấm phẩy hoặc xuống
-	// dòng. Nếu không có các dấu này, traceFormat quyết định stride X Y [F...];
-	// trang không khai báo traceFormat được đọc theo từng cặp X Y.
-	groups := strings.FieldsFunc(value, func(character rune) bool {
-		return character == ',' || character == ';' || character == '\n' || character == '\r'
-	})
-	points := make([]inkPoint, 0)
-	appendPoint := func(rawX, rawY string) {
-		mode := byte(0)
-		if rawX != "" && strings.ContainsRune("'\"!", rune(rawX[0])) {
-			mode = rawX[0]
-		}
+	var pts []inkPoint
+	var prev inkPoint
+
+	for i := 0; i+1 < len(fields); i += 2 {
+		rawX, rawY := fields[i], fields[i+1]
+		isDiff := strings.HasPrefix(rawX, "'") || strings.HasPrefix(rawX, "\"")
 		rawX = strings.TrimLeft(rawX, "'\"!")
 		rawY = strings.TrimLeft(rawY, "'\"!")
+
 		x, errX := strconv.ParseFloat(rawX, 64)
 		y, errY := strconv.ParseFloat(rawY, 64)
 		if errX != nil || errY != nil {
-			return
-		}
-		point := inkPoint{X: x, Y: y}
-		switch mode {
-		case '\'': // first-order difference
-			if len(points) > 0 {
-				previous := points[len(points)-1]
-				point.X += previous.X
-				point.Y += previous.Y
-			}
-		case '"': // second-order difference
-			if len(points) > 1 {
-				previous := points[len(points)-1]
-				beforePrevious := points[len(points)-2]
-				point.X += 2*previous.X - beforePrevious.X
-				point.Y += 2*previous.Y - beforePrevious.Y
-			} else if len(points) == 1 {
-				point.X += points[0].X
-				point.Y += points[0].Y
-			}
-		}
-		points = append(points, point)
-	}
-
-	if len(groups) > 1 {
-		for _, group := range groups {
-			fields := strings.Fields(group)
-			if len(fields) < 2 {
-				continue
-			}
-			xIndex, yIndex := 0, 1
-			if layout.Stride > 0 && layout.XIndex < len(fields) && layout.YIndex < len(fields) {
-				xIndex, yIndex = layout.XIndex, layout.YIndex
-			}
-			appendPoint(fields[xIndex], fields[yIndex])
-		}
-		return points
-	}
-
-	fields := strings.Fields(value)
-	stride, xIndex, yIndex := 2, 0, 1
-	if layout.Stride >= 2 {
-		stride, xIndex, yIndex = layout.Stride, layout.XIndex, layout.YIndex
-	}
-	for offset := 0; offset+stride <= len(fields); offset += stride {
-		appendPoint(fields[offset+xIndex], fields[offset+yIndex])
-	}
-	return points
-}
-
-func splitAndRenderInkPerExercise(data []byte, boundaries []inkExerciseBoundary, exerciseIDs []int) (map[int][]byte, error) {
-	traces, err := parseInkMLTraces(data)
-	if err != nil || len(traces) == 0 {
-		return nil, err
-	}
-	result := make(map[int][]byte)
-	groups := make(map[int][]inkTrace)
-
-	validBoundaries := append([]inkExerciseBoundary(nil), boundaries...)
-	sort.Slice(validBoundaries, func(i, j int) bool { return validBoundaries[i].Y < validBoundaries[j].Y })
-	if len(validBoundaries) >= 2 {
-		for _, trace := range traces {
-			midY := (trace.MinY + trace.MaxY) / 2
-			selected := validBoundaries[0].ExerciseID
-			for _, boundary := range validBoundaries {
-				if midY < boundary.Y {
-					break
-				}
-				selected = boundary.ExerciseID
-			}
-			groups[selected] = append(groups[selected], trace)
-		}
-	} else {
-		// Khi HTML chỉ có một outline chung, không đủ dữ liệu để biết nét nào
-		// thuộc câu nào. Giữ toàn bộ bài viết tay cho mọi câu để AI vẫn nhìn thấy
-		// bài làm, thay vì làm mất ảnh của các câu sau.
-		fullPageImage, err := renderInkTracesToJPEG(traces)
-		if err != nil {
-			return nil, fmt.Errorf("render toàn bộ Ink trang: %w", err)
-		}
-		for _, exerciseID := range exerciseIDs {
-			if len(fullPageImage) > 0 {
-				result[exerciseID] = fullPageImage
-			}
-		}
-		return result, nil
-	}
-
-	for exerciseID, exerciseTraces := range groups {
-		image, err := renderInkTracesToJPEG(exerciseTraces)
-		if err != nil {
-			return nil, fmt.Errorf("render Ink câu %d: %w", exerciseID, err)
-		}
-		if len(image) > 0 {
-			result[exerciseID] = image
-		}
-	}
-	return result, nil
-}
-
-func renderInkTracesToJPEG(traces []inkTrace) ([]byte, error) {
-	if len(traces) == 0 {
-		return nil, nil
-	}
-	minX, minY := math.MaxFloat64, math.MaxFloat64
-	maxX, maxY := -math.MaxFloat64, -math.MaxFloat64
-	for _, trace := range traces {
-		minX = math.Min(minX, trace.MinX)
-		minY = math.Min(minY, trace.MinY)
-		maxX = math.Max(maxX, trace.MaxX)
-		maxY = math.Max(maxY, trace.MaxY)
-	}
-	if minX == math.MaxFloat64 {
-		return nil, nil
-	}
-
-	const padding = 30.0
-	contentWidth := maxX - minX
-	contentHeight := maxY - minY
-	scale := math.Min(1, math.Min(1400/contentWidth, 1800/contentHeight))
-	width := int(math.Ceil(contentWidth*scale + padding*2))
-	height := int(math.Ceil(contentHeight*scale + padding*2))
-	if width < 200 {
-		width = 200
-	}
-	if height < 100 {
-		height = 100
-	}
-
-	drawing := gg.NewContext(width, height)
-	drawing.SetRGB(1, 1, 1)
-	drawing.Clear()
-	drawing.SetRGB(0, 0.08, 0.35)
-	drawing.SetLineWidth(math.Max(2, 2.5*scale))
-	drawing.SetLineCap(gg.LineCapRound)
-	drawing.SetLineJoin(gg.LineJoinRound)
-	for _, trace := range traces {
-		if len(trace.Points) == 0 {
 			continue
 		}
-		drawing.MoveTo((trace.Points[0].X-minX)*scale+padding, (trace.Points[0].Y-minY)*scale+padding)
-		for _, point := range trace.Points[1:] {
-			drawing.LineTo((point.X-minX)*scale+padding, (point.Y-minY)*scale+padding)
-		}
-		if len(trace.Points) == 1 {
-			drawing.DrawCircle((trace.Points[0].X-minX)*scale+padding, (trace.Points[0].Y-minY)*scale+padding, 1.5)
-			drawing.Fill()
-		} else {
-			drawing.Stroke()
-		}
-	}
 
-	var output bytes.Buffer
-	if err := jpeg.Encode(&output, drawing.Image(), &jpeg.Options{Quality: 85}); err != nil {
-		return nil, err
+		if isDiff && len(pts) > 0 {
+			x += prev.X
+			y += prev.Y
+		}
+
+		p := inkPoint{X: x, Y: y}
+		pts = append(pts, p)
+		prev = p
 	}
-	return output.Bytes(), nil
+	return pts
 }

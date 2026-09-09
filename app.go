@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	goRuntime "runtime"
 	"strings"
 	"time"
 
@@ -289,8 +291,29 @@ func (a *App) ListWorkspaces() ([]domain.Workspace, error) {
 }
 
 // GỌI QUA WORKSPACE COMMAND:
-func (a *App) PublishLessonToOneNote(cmd application.PublishLessonCommand) error {
+func (a *App) PublishLessonToOneNote(cmd application.PublishLessonCommand) (*application.PublishResult, error) {
 	return a.workspaceCmd.PublishLesson(a.ctx, cmd)
+}
+
+// OpenExternalURL mở đúng trang OneNote bằng trình duyệt mặc định của hệ điều hành.
+// Chỉ nhận HTTP(S) để UI không thể khởi chạy lệnh hoặc giao thức tùy ý.
+func (a *App) OpenExternalURL(targetURL string) error {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(targetURL))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return errors.New("đường dẫn OneNote không hợp lệ")
+	}
+
+	// OneNote uses ! inside resource IDs. Wails' Windows URL sanitizer rejects a
+	// literal ! even though it is valid in a query value, so percent-encode it
+	// before handing the URL to the system browser. OneDrive decodes %21 back to !.
+	safeURL := strings.ReplaceAll(parsed.String(), "!", "%21")
+	if goRuntime.GOOS == "windows" {
+		runtime.BrowserOpenURL(a.ctx, safeURL)
+		return nil
+	}
+
+	openCrossPlatformBrowser(a.ctx, safeURL)
+	return nil
 }
 
 // / 1. Kiểm tra xem đã đăng nhập tài khoản Google chưa

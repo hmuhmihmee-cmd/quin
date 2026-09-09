@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"meet-attendance-clean/application"
 	"meet-attendance-clean/domain"
@@ -36,13 +35,17 @@ func (s *SQLite) Save(ctx context.Context, assignment *domain.Assignment) error 
 	}
 
 	id, err := s.queries.SaveAssignment(ctx, sqlcgen.SaveAssignmentParams{
-		Title:          strings.TrimSpace(assignment.Title),
-		AssignmentType: string(assignment.Type),
-		Status:         string(assignment.Status),
-		AssignedAt:     assignment.AssignedAt,
-		AssigneeID:     int64(assignment.Assignee.ID),
-		TargetPageID:   strings.TrimSpace(assignment.TargetPageID),
-		ItemsJson:      string(itemsJSON),
+		Title:             strings.TrimSpace(assignment.Title),
+		AssignmentType:    string(assignment.Type),
+		Status:            string(assignment.Status),
+		AssignedAt:        assignment.AssignedAt,
+		AssigneeID:        int64(assignment.Assignee.ID),
+		TargetPageID:      strings.TrimSpace(assignment.TargetPageID),
+		StudentPageWebUrl: strings.TrimSpace(assignment.StudentPageWebURL),
+		TeacherPageWebUrl: strings.TrimSpace(assignment.TeacherPageWebURL),
+		ItemsJson:         string(itemsJSON),
+		OriginMistakeID:   nullableIntPointer(assignment.OriginMistakeID),
+		Depth:             int64(assignment.Depth),
 	})
 	if err != nil {
 		return fmt.Errorf("save assignment: %w", err)
@@ -66,11 +69,13 @@ func (s *SQLite) GetByPageID(ctx context.Context, pageID string) (*domain.Assign
 	}
 
 	return &domain.Assignment{
-		ID:         int(row.ID),
-		Title:      row.Title,
-		Type:       domain.AssignmentType(row.AssignmentType),
-		Status:     domain.AssignmentStatus(row.Status),
-		AssignedAt: row.AssignedAt,
+		ID:              int(row.ID),
+		Title:           row.Title,
+		Type:            domain.AssignmentType(row.AssignmentType),
+		Status:          domain.AssignmentStatus(row.Status),
+		AssignedAt:      row.AssignedAt,
+		OriginMistakeID: intPointer(row.OriginMistakeID),
+		Depth:           int(row.Depth),
 		Assignee: domain.Student{
 			ID:                 int(row.StudentID),
 			Class:              row.StudentClass,
@@ -79,45 +84,11 @@ func (s *SQLite) GetByPageID(ctx context.Context, pageID string) (*domain.Assign
 			StudentWorkspaceID: stringPointer(row.StudentWorkspaceID),
 			TeacherWorkspaceID: stringPointer(row.TeacherWorkspaceID),
 		},
-		TargetPageID: row.TargetPageID,
-		Items:        items,
+		TargetPageID:      row.TargetPageID,
+		StudentPageWebURL: row.StudentPageWebUrl,
+		TeacherPageWebURL: row.TeacherPageWebUrl,
+		Items:             items,
 	}, nil
-}
-
-// ==================== HẠ TẦNG MỚI: MistakeRepository ====================
-
-func (s *SQLite) SaveMistakes(ctx context.Context, studentID int, assignmentID int, mistakes []domain.Mistake) error {
-	if len(mistakes) == 0 {
-		return nil
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	queries := s.queries.WithTx(tx)
-
-	for i := range mistakes {
-		createdAt := mistakes[i].CreatedAt
-		if createdAt.IsZero() {
-			createdAt = time.Now().UTC()
-		}
-		id, err := queries.CreateMistake(ctx, sqlcgen.CreateMistakeParams{
-			StudentID:    int64(studentID),
-			AssignmentID: int64(assignmentID),
-			Topic:        strings.TrimSpace(mistakes[i].Topic),
-			ErrorReason:  strings.TrimSpace(mistakes[i].ErrorReason),
-			IsResolved:   boolToSQLite(mistakes[i].IsResolved),
-			CreatedAt:    createdAt,
-		})
-		if err != nil {
-			return fmt.Errorf("save mistake %d: %w", i+1, err)
-		}
-		mistakes[i].ID = int(id)
-	}
-
-	return tx.Commit()
 }
 
 func (s *SQLite) ListAssignmentSummaries(ctx context.Context) ([]application.AssignmentSummary, error) {
@@ -142,35 +113,13 @@ func (s *SQLite) ListAssignmentSummaries(ctx context.Context) ([]application.Ass
 		}
 		result = append(result, application.AssignmentSummary{
 			AssignmentID: int(row.ID), PageID: row.TargetPageID, Title: row.Title,
+			StudentPageWebURL: row.StudentPageWebUrl, TeacherPageWebURL: row.TeacherPageWebUrl,
 			StudentID: int(row.StudentID), StudentName: row.StudentName,
 			Status: domain.AssignmentStatus(row.Status), AssignedAt: row.AssignedAt,
 			CorrectCount: correct, GradedCount: graded, TotalCount: len(items),
 		})
 	}
 	return result, nil
-}
-
-func (s *SQLite) ListMistakeGroups(ctx context.Context) ([]application.StudentMistakeGroup, error) {
-	rows, err := s.queries.ListMistakesWithStudents(ctx)
-	if err != nil {
-		return nil, err
-	}
-	groups := make([]application.StudentMistakeGroup, 0)
-	index := make(map[int]int)
-	for _, row := range rows {
-		studentID := int(row.StudentID)
-		groupIndex, ok := index[studentID]
-		if !ok {
-			groupIndex = len(groups)
-			index[studentID] = groupIndex
-			groups = append(groups, application.StudentMistakeGroup{StudentID: studentID, StudentName: row.StudentName})
-		}
-		groups[groupIndex].Mistakes = append(groups[groupIndex].Mistakes, domain.Mistake{
-			ID: int(row.ID), Topic: row.Topic, ErrorReason: row.ErrorReason,
-			IsResolved: row.IsResolved != 0, CreatedAt: row.CreatedAt,
-		})
-	}
-	return groups, nil
 }
 
 func (s *SQLite) ListStudentChoices(ctx context.Context) ([]application.StudentChoice, error) {
@@ -189,40 +138,4 @@ func (s *SQLite) ListStudentChoices(ctx context.Context) ([]application.StudentC
 		})
 	}
 	return result, nil
-}
-
-func (s *SQLite) GetMistakeContext(ctx context.Context, mistakeID int) (*application.MistakeContext, error) {
-	row, err := s.queries.GetMistakeContext(ctx, int64(mistakeID))
-	if err != nil {
-		return nil, err
-	}
-	return &application.MistakeContext{
-		Mistake: domain.Mistake{ID: int(row.ID), Topic: row.Topic, ErrorReason: row.ErrorReason, IsResolved: row.IsResolved != 0, CreatedAt: row.CreatedAt},
-		Student: domain.Student{
-			ID:                 int(row.StudentID),
-			Class:              row.StudentClass,
-			Name:               row.StudentName,
-			CycleStartDay:      int(row.StudentCycleStartDay),
-			StudentWorkspaceID: stringPointer(row.StudentWorkspaceID),
-			TeacherWorkspaceID: stringPointer(row.TeacherWorkspaceID),
-		},
-	}, nil
-}
-
-func (s *SQLite) MarkMistakeResolved(ctx context.Context, mistakeID int) error {
-	affected, err := s.queries.MarkMistakeResolved(ctx, int64(mistakeID))
-	if err != nil {
-		return err
-	}
-	if affected == 0 {
-		return fmt.Errorf("không tìm thấy lỗi sai %d", mistakeID)
-	}
-	return nil
-}
-
-func boolToSQLite(value bool) int64 {
-	if value {
-		return 1
-	}
-	return 0
 }

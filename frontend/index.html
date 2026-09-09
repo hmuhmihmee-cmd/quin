@@ -131,7 +131,7 @@
               <thead>
                 <tr>
                   <th>Học sinh</th>
-                  <th>Mã Space (Lớp)</th>
+                  <th>Lịch / mã Meet</th>
                   <th>Ngày bắt đầu chu kỳ</th>
                   <th>Số buổi</th>
                   <th>Tổng thời lượng</th>
@@ -153,7 +153,7 @@
           <div>
             <span class="eyebrow">Chi tiết học sinh</span>
             <h1 id="detail-name">Học sinh</h1>
-            <p id="detail-space" class="text-muted">Space ID: ...</p>
+            <p id="detail-space" class="text-muted">Lịch / mã Meet: ...</p>
           </div>
         </header>
 
@@ -252,7 +252,7 @@
             <div class="field">
               <label>Model AI</label>
               <select id="lesson-model-select">
-                <option value="gemini-3.7-flash" selected>Gemini 3.7 Flash (Mặc định)</option>
+                <option value="gemini-3.5-flash" selected>Gemini 3.5 Flash (Mặc định)</option>
               </select>
             </div>
             <div class="field" style="grid-column: 1 / -1;">
@@ -307,7 +307,6 @@
           <div class="action-buttons">
             <button class="btn btn-secondary" onclick="handleSaveDraft()">Lưu bản nháp</button>
             <button class="btn btn-onenote" onclick="openPushOneNoteDialog()">Đẩy lên OneNote (GV & HS)</button>
-            <button class="btn btn-primary" onclick="handleExportPDF()">Xuất 2 file PDF</button>
           </div>
         </header>
 
@@ -413,7 +412,7 @@
       <div class="modal-header"><h3 style="color:#15803d">Tạo bài tập từ lỗi sai</h3><button class="modal-close" onclick="closeRemediationModal()">✕</button></div>
       <div class="modal-body">
         <p id="remediation-context" class="mistake-context"></p>
-        <div class="count-grid"><div class="field"><label>Số câu trắc nghiệm</label><input type="number" id="remediation-mc" min="0" max="20" value="3"></div><div class="field"><label>Số câu tự luận</label><input type="number" id="remediation-essay" min="0" max="20" value="2"></div></div>
+		<div class="field"><label>Số câu bài tập</label><input type="number" id="remediation-count" min="1" max="20" value="5"></div>
         <div class="field" style="margin-top:12px"><label>Model AI</label><select id="remediation-model"></select></div>
         <div class="field" style="margin-top:12px"><label>Yêu cầu thêm (không bắt buộc)</label><textarea id="remediation-prompt" placeholder="Ví dụ: tăng dần độ khó, phù hợp lớp 11..."></textarea></div>
       </div>

@@ -60,7 +60,7 @@ func (c *LessonCommand) CreateDraftJob(ctx context.Context, modelName, sourceURL
 		return 0, errors.New("đường dẫn video không hợp lệ")
 	}
 	if modelName == "" {
-		modelName = "gemini-3.7-flash" // Mặc định nếu để trống
+		modelName = "gemini-3.5-flash" // Mặc định nếu để trống
 	}
 
 	draft := &domain.LessonDraft{

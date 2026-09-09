@@ -46,7 +46,7 @@ func (u *MeetCommand) Sync(ctx context.Context) error {
 	lastSync, err := u.syncRepo.LastSync(ctx)
 	var syncTime time.Time
 	if err != nil {
-		syncTime = time.Now().AddDate(0, -3, 0)
+		syncTime = time.Now().UTC().AddDate(0, -3, 0)
 	} else {
 		syncTime = (*lastSync).AddDate(0, 0, -3)
 	}
@@ -70,6 +70,8 @@ func (u *MeetCommand) Sync(ctx context.Context) error {
 			newStudent := domain.Student{
 				Name:          "Học sinh mới",
 				Class:         meet.Class,
+				MeetingCode:   meet.MeetingCode,
+				SpaceName:     meet.SpaceName,
 				CycleStartDay: 1,
 			}
 			finalStudent = append(finalStudent, newStudent)

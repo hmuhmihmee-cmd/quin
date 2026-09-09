@@ -14,8 +14,22 @@ SELECT EXISTS(
 );
 
 -- name: CreateStudent :exec
-INSERT INTO students (class, name, cycle_start_day)
-VALUES (?, ?, ?);
+INSERT INTO students (class, name, meeting_code, space_name, cycle_start_day)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: UpdateStudentMeetIdentity :exec
+UPDATE students
+SET meeting_code = ?, space_name = ?
+WHERE class = ?;
+
+-- name: UpdateDefaultStudentName :exec
+UPDATE students
+SET name = CASE
+    WHEN ? <> '' THEN ?
+    ELSE printf('%s%d', ?, id)
+END
+WHERE class = ?
+  AND (name = ? OR name GLOB ?);
 
 -- name: UpsertMeeting :one
 INSERT INTO meetings (
@@ -41,7 +55,7 @@ ON CONFLICT(meeting_id, name) DO UPDATE SET
 
 
 -- name: GetStudent :one
-SELECT id, class, name, cycle_start_day, student_workspace_id, teacher_workspace_id
+SELECT id, class, name, meeting_code, space_name, cycle_start_day, student_workspace_id, teacher_workspace_id
 FROM students
 WHERE id = ?;
 
@@ -71,6 +85,8 @@ SELECT
     s.id,
     s.class,
     s.name,
+	s.meeting_code,
+	s.space_name,
     s.cycle_start_day,
     COUNT(m.id) AS total_sessions,
     CAST(COALESCE(SUM(m.duration_minutes), 0) AS INTEGER) AS total_duration_minutes
@@ -145,15 +161,20 @@ WHERE id = ?;
 -- NEW INFRASTRUCTURE: insert/update Assignment by OneNote PageID.
 -- name: SaveAssignment :one
 INSERT INTO assignments (
-    title, assignment_type, status, assigned_at, assignee_id, target_page_id, items_json
-) VALUES (?, ?, ?, ?, ?, ?, ?)
+	title, assignment_type, status, assigned_at, assignee_id, target_page_id, student_page_web_url, teacher_page_web_url, items_json,
+    origin_mistake_id, depth
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(target_page_id) DO UPDATE SET
     title = excluded.title,
     assignment_type = excluded.assignment_type,
     status = excluded.status,
     assigned_at = excluded.assigned_at,
     assignee_id = excluded.assignee_id,
-    items_json = excluded.items_json
+	student_page_web_url = excluded.student_page_web_url,
+	teacher_page_web_url = excluded.teacher_page_web_url,
+    items_json = excluded.items_json,
+    origin_mistake_id = excluded.origin_mistake_id,
+    depth = excluded.depth
 RETURNING id;
 
 -- NEW INFRASTRUCTURE: load Assignment and student by OneNote PageID.
@@ -165,7 +186,11 @@ SELECT
     a.status,
     a.assigned_at,
     a.target_page_id,
+	a.student_page_web_url,
+	a.teacher_page_web_url,
     a.items_json,
+    a.origin_mistake_id,
+    a.depth,
     s.id AS student_id,
     s.class AS student_class,
     s.name AS student_name,
@@ -176,11 +201,12 @@ FROM assignments a
 JOIN students s ON s.id = a.assignee_id
 WHERE a.target_page_id = ?;
 
--- NEW INFRASTRUCTURE: persist one detected mistake through sqlc.
+-- Persist one detected mistake, including its remediation ancestry.
 -- name: CreateMistake :one
 INSERT INTO mistakes (
-    student_id, assignment_id, topic, error_reason, is_resolved, created_at
-) VALUES (?, ?, ?, ?, ?, ?)
+    student_id, source_assignment_id, parent_mistake_id, depth,
+    topic, error_reason, status, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
 -- NEW UI INFRASTRUCTURE: aggregate assignments for the grading screen.
@@ -191,6 +217,8 @@ SELECT
     a.status,
     a.assigned_at,
     a.target_page_id,
+	a.student_page_web_url,
+	a.teacher_page_web_url,
     a.items_json,
     s.id AS student_id,
     s.name AS student_name
@@ -198,30 +226,34 @@ FROM assignments a
 JOIN students s ON s.id = a.assignee_id
 ORDER BY a.assigned_at DESC;
 
--- NEW UI INFRASTRUCTURE: list mistakes together with their student.
+-- List mistakes together with their student.
 -- name: ListMistakesWithStudents :many
 SELECT
     m.id,
     m.student_id,
-    m.assignment_id,
+    m.source_assignment_id,
+    m.parent_mistake_id,
+    m.depth,
     m.topic,
     m.error_reason,
-    m.is_resolved,
+    m.status,
     m.created_at,
     s.name AS student_name
 FROM mistakes m
 JOIN students s ON s.id = m.student_id
 ORDER BY s.name ASC, m.created_at DESC;
 
--- NEW UI INFRASTRUCTURE: load all data needed to create remediation work.
--- name: GetMistakeContext :one
+-- Load the selected mistake and the student who owns it.
+-- name: GetMistakeWithStudent :one
 SELECT
     m.id,
     m.student_id,
-    m.assignment_id,
+    m.source_assignment_id,
+    m.parent_mistake_id,
+    m.depth,
     m.topic,
     m.error_reason,
-    m.is_resolved,
+    m.status,
     m.created_at,
     s.class AS student_class,
     s.name AS student_name,
@@ -232,14 +264,43 @@ FROM mistakes m
 JOIN students s ON s.id = m.student_id
 WHERE m.id = ?;
 
--- NEW UI INFRASTRUCTURE: close a mistake after remediation is assigned.
--- name: MarkMistakeResolved :execrows
+-- Load one mistake for status transitions.
+-- name: GetMistakeByID :one
+SELECT id, source_assignment_id, parent_mistake_id, depth, topic, error_reason, status, created_at
+FROM mistakes
+WHERE id = ?;
+
+-- Load ancestors from root to the direct parent of the requested mistake.
+-- name: ListMistakeAncestry :many
+WITH RECURSIVE ancestry(id, source_assignment_id, parent_mistake_id, depth, topic, error_reason, status, created_at, distance) AS (
+    SELECT m.id, m.source_assignment_id, m.parent_mistake_id, m.depth, m.topic, m.error_reason, m.status, m.created_at, 0
+    FROM mistakes m
+    WHERE m.id = ?
+    UNION ALL
+    SELECT parent.id, parent.source_assignment_id, parent.parent_mistake_id, parent.depth,
+           parent.topic, parent.error_reason, parent.status, parent.created_at, ancestry.distance + 1
+    FROM mistakes parent
+    JOIN ancestry ON ancestry.parent_mistake_id = parent.id
+)
+SELECT id, source_assignment_id, parent_mistake_id, depth, topic, error_reason, status, created_at
+FROM ancestry
+WHERE distance > 0
+ORDER BY distance DESC;
+
+-- Persist all domain-owned fields after a lifecycle transition.
+-- name: UpdateMistake :execrows
 UPDATE mistakes
-SET is_resolved = 1
+SET source_assignment_id = ?,
+    parent_mistake_id = ?,
+    depth = ?,
+    topic = ?,
+    error_reason = ?,
+    status = ?,
+    created_at = ?
 WHERE id = ?;
 
 -- NEW UI INFRASTRUCTURE: populate compact student selectors.
 -- name: ListStudentChoices :many
-SELECT id, name, class, student_workspace_id, teacher_workspace_id
+SELECT id, name, class, meeting_code, space_name, student_workspace_id, teacher_workspace_id
 FROM students
 ORDER BY name ASC;

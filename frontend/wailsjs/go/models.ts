@@ -3,6 +3,8 @@ export namespace application {
 	export class AssignmentSummary {
 	    assignment_id: number;
 	    page_id: string;
+	    student_page_web_url: string;
+	    teacher_page_web_url: string;
 	    title: string;
 	    student_id: number;
 	    student_name: string;
@@ -21,6 +23,8 @@ export namespace application {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.assignment_id = source["assignment_id"];
 	        this.page_id = source["page_id"];
+	        this.student_page_web_url = source["student_page_web_url"];
+	        this.teacher_page_web_url = source["teacher_page_web_url"];
 	        this.title = source["title"];
 	        this.student_id = source["student_id"];
 	        this.student_name = source["student_name"];
@@ -66,6 +70,8 @@ export namespace application {
 	export class StudentSummary {
 	    id: number;
 	    class: string;
+	    meeting_code: string;
+	    space_name: string;
 	    name: string;
 	    cycle_start_day: number;
 	    total_sessions: number;
@@ -79,6 +85,8 @@ export namespace application {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.class = source["class"];
+	        this.meeting_code = source["meeting_code"];
+	        this.space_name = source["space_name"];
 	        this.name = source["name"];
 	        this.cycle_start_day = source["cycle_start_day"];
 	        this.total_sessions = source["total_sessions"];
@@ -245,6 +253,26 @@ export namespace application {
 		    return a;
 		}
 	}
+	export class PublishResult {
+	    page_id: string;
+	    workspace_id: string;
+	    page_web_url: string;
+	    student_page_web_url: string;
+	    teacher_page_web_url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PublishResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.page_id = source["page_id"];
+	        this.workspace_id = source["workspace_id"];
+	        this.page_web_url = source["page_web_url"];
+	        this.student_page_web_url = source["student_page_web_url"];
+	        this.teacher_page_web_url = source["teacher_page_web_url"];
+	    }
+	}
 	export class StudentChoice {
 	    id: number;
 	    name: string;
@@ -396,9 +424,12 @@ export namespace domain {
 	}
 	export class Mistake {
 	    id: number;
+	    source_assignment_id: number;
+	    parent_mistake_id?: number;
+	    depth: number;
 	    topic: string;
 	    error_reason: string;
-	    is_resolved: boolean;
+	    status: string;
 	    // Go type: time
 	    created_at: any;
 	
@@ -409,9 +440,12 @@ export namespace domain {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.source_assignment_id = source["source_assignment_id"];
+	        this.parent_mistake_id = source["parent_mistake_id"];
+	        this.depth = source["depth"];
 	        this.topic = source["topic"];
 	        this.error_reason = source["error_reason"];
-	        this.is_resolved = source["is_resolved"];
+	        this.status = source["status"];
 	        this.created_at = this.convertValues(source["created_at"], null);
 	    }
 	
@@ -436,6 +470,7 @@ export namespace domain {
 	export class GradingResult {
 	    status: string;
 	    is_correct: boolean;
+	    score: number;
 	    feedback_html: string;
 	    detected_mistake?: Mistake;
 	
@@ -447,6 +482,7 @@ export namespace domain {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.status = source["status"];
 	        this.is_correct = source["is_correct"];
+	        this.score = source["score"];
 	        this.feedback_html = source["feedback_html"];
 	        this.detected_mistake = this.convertValues(source["detected_mistake"], Mistake);
 	    }
@@ -471,7 +507,8 @@ export namespace domain {
 	}
 	export class StudentAnswer {
 	    text?: string;
-	    is_blank: boolean;
+	    choice_selection: string;
+	    selected_option?: string;
 	    // Go type: time
 	    extracted_at: any;
 	
@@ -482,7 +519,8 @@ export namespace domain {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.text = source["text"];
-	        this.is_blank = source["is_blank"];
+	        this.choice_selection = source["choice_selection"];
+	        this.selected_option = source["selected_option"];
 	        this.extracted_at = this.convertValues(source["extracted_at"], null);
 	    }
 	
@@ -507,6 +545,7 @@ export namespace domain {
 	export class Exercise {
 	    id: number;
 	    type: string;
+	    topic: string;
 	    difficulty: string;
 	    question: string;
 	    options?: string[];
@@ -521,6 +560,7 @@ export namespace domain {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.type = source["type"];
+	        this.topic = source["topic"];
 	        this.difficulty = source["difficulty"];
 	        this.question = source["question"];
 	        this.options = source["options"];
@@ -566,6 +606,8 @@ export namespace domain {
 	    id: number;
 	    name: string;
 	    class: string;
+	    meeting_code: string;
+	    space_name: string;
 	    cycle_start_day: number;
 	    student_workspace_id?: string;
 	    teacher_workspace_id?: string;
@@ -579,6 +621,8 @@ export namespace domain {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.class = source["class"];
+	        this.meeting_code = source["meeting_code"];
+	        this.space_name = source["space_name"];
 	        this.cycle_start_day = source["cycle_start_day"];
 	        this.student_workspace_id = source["student_workspace_id"];
 	        this.teacher_workspace_id = source["teacher_workspace_id"];
@@ -593,7 +637,12 @@ export namespace domain {
 	    assigned_at: any;
 	    assignee: Student;
 	    target_page_id: string;
+	    student_page_web_url: string;
+	    teacher_page_web_url: string;
 	    items: AssignedExercise[];
+	    page_ink_image: number[];
+	    origin_mistake_id?: number;
+	    depth: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Assignment(source);
@@ -608,7 +657,12 @@ export namespace domain {
 	        this.assigned_at = this.convertValues(source["assigned_at"], null);
 	        this.assignee = this.convertValues(source["assignee"], Student);
 	        this.target_page_id = source["target_page_id"];
+	        this.student_page_web_url = source["student_page_web_url"];
+	        this.teacher_page_web_url = source["teacher_page_web_url"];
 	        this.items = this.convertValues(source["items"], AssignedExercise);
+	        this.page_ink_image = source["page_ink_image"];
+	        this.origin_mistake_id = source["origin_mistake_id"];
+	        this.depth = source["depth"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -866,6 +920,8 @@ export namespace domain {
 	export class Meeting {
 	    id: string;
 	    class: string;
+	    meeting_code: string;
+	    space_name: string;
 	    // Go type: time
 	    started_at: any;
 	    // Go type: time
@@ -880,6 +936,8 @@ export namespace domain {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.class = source["class"];
+	        this.meeting_code = source["meeting_code"];
+	        this.space_name = source["space_name"];
 	        this.started_at = this.convertValues(source["started_at"], null);
 	        this.ended_at = this.convertValues(source["ended_at"], null);
 	        this.participants = this.convertValues(source["participants"], Participant);

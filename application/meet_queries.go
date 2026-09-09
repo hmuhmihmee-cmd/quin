@@ -31,6 +31,8 @@ type DashboardView struct {
 type StudentSummary struct {
 	ID                   int    `json:"id"`
 	Class                string `json:"class"`
+	MeetingCode          string `json:"meeting_code"`
+	SpaceName            string `json:"space_name"`
 	Name                 string `json:"name"`
 	CycleStartDay        int    `json:"cycle_start_day"`
 	TotalSessions        int    `json:"total_sessions"`

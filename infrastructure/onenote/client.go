@@ -12,15 +12,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"meet-attendance-clean/application"
 	"meet-attendance-clean/domain"
 	"meet-attendance-clean/infrastructure/html"
-	pdfformat "meet-attendance-clean/infrastructure/pdf"
 
 	xhtml "golang.org/x/net/html"
 	"golang.org/x/oauth2"
@@ -31,16 +30,14 @@ const graphAPIBase = "https://graph.microsoft.com/v1.0/me/onenote"
 type Client struct {
 	config        *oauth2.Config
 	tokenPath     string
-	htmlConverter *html.Converter // Cắm converter vào
-	formatter     *pdfformat.Formatter
+	htmlConverter *html.LessonRenderer
 }
 
 var (
-	exerciseHeadingPattern = regexp.MustCompile(`(?i)^\*\*Câu\s+(\d+)\b`)
-	htmlTagPattern         = regexp.MustCompile(`(?s)<[^>]*>`)
-	unsafeHTMLBlockPattern = regexp.MustCompile(`(?is)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>`)
-	unsafeHTMLAttrPattern  = regexp.MustCompile(`(?i)\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*')`)
-	verboseFeedbackPattern = regexp.MustCompile(`(?is)<p[^>]*>\s*(?:rất tiếc|em đã chọn|câu trả lời của em|đáp án em chọn)[^<]*</p>`)
+	unsafeHTMLBlockPattern  = regexp.MustCompile(`(?is)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>`)
+	unsafeHTMLAttrPattern   = regexp.MustCompile(`(?i)\s+on[a-z]+\s*=\s*("[^"]*"|'[^']*')`)
+	debugPathUnsafePattern  = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+	answerDebugSnapshotRoot = filepath.Join("debug", "onenote-answer-snapshots")
 )
 
 func New(clientID, clientSecret, redirectURL, tokenPath string) *Client {
@@ -57,8 +54,7 @@ func New(clientID, clientSecret, redirectURL, tokenPath string) *Client {
 	return &Client{
 		config:        cfg,
 		tokenPath:     tokenPath,
-		htmlConverter: html.New(),
-		formatter:     pdfformat.NewFormatter(),
+		htmlConverter: html.NewLessonRenderer(),
 	}
 }
 
@@ -78,12 +74,7 @@ func (c *Client) Exchange(ctx context.Context, code string) error {
 	if err != nil {
 		return fmt.Errorf("đổi token Microsoft: %w", err)
 	}
-	file, err := os.OpenFile(c.tokenPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	return json.NewEncoder(file).Encode(token)
+	return c.saveToken(token)
 }
 
 func (c *Client) Disconnect() error {
@@ -127,7 +118,7 @@ func (c *Client) saveToken(token *oauth2.Token) error {
 	return json.NewEncoder(file).Encode(token)
 }
 
-// ==================== 2. IMPLEMENT WorkspaceGateway ====================
+// ==================== 2. TRUY VẤN & GIAO BÀI ====================
 
 func (c *Client) ListWorkspaces(ctx context.Context) ([]domain.Workspace, error) {
 	client, err := c.getHTTPClient(ctx)
@@ -172,214 +163,462 @@ func (c *Client) ListWorkspaces(ctx context.Context) ([]domain.Workspace, error)
 	return workspaces, nil
 }
 
-func (c *Client) PublishSession(ctx context.Context, target application.WorkspaceTarget, audience domain.Audience, lesson domain.Lesson) (string, string, error) {
+func (c *Client) PublishSession(ctx context.Context, target application.WorkspaceTarget, audience domain.Audience, lesson domain.Lesson) (application.PublishResult, error) {
 	client, err := c.getHTTPClient(ctx)
 	if err != nil {
-		return "", "", err
+		return application.PublishResult{}, err
 	}
 
 	workspaceID, err := c.resolveNotebook(ctx, client, target)
 	if err != nil {
-		return "", "", fmt.Errorf("chuẩn bị Notebook: %w", err)
+		return application.PublishResult{}, fmt.Errorf("chuẩn bị Notebook: %w", err)
 	}
+
 	sectionID, err := c.resolveSection(ctx, client, workspaceID, target)
 	if err != nil {
-		return "", "", fmt.Errorf("chuẩn bị Section: %w", err)
+		return application.PublishResult{}, fmt.Errorf("chuẩn bị Section: %w", err)
 	}
 
-	markdown := c.formatter.Format(&lesson, audience, "")
-	if audience == domain.AudienceStudent {
-		markdown = addExerciseMarkers(markdown)
+	pageName := lesson.Title
+	if target.PageName != nil && strings.TrimSpace(*target.PageName) != "" {
+		pageName = strings.TrimSpace(*target.PageName)
 	}
-	pageName := strings.TrimSpace(pointerValue(target.PageName))
-	htmlPayload := c.htmlConverter.MarkdownToDocument(pageName, markdown)
 
-	// Mỗi lần publish luôn tạo một Page mới.
+	htmlPayload := c.htmlConverter.RenderLessonHTML(pageName, &lesson, audience)
+
 	endpoint := fmt.Sprintf("%s/sections/%s/pages", graphAPIBase, url.PathEscape(sectionID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(htmlPayload))
 	if err != nil {
-		return "", "", err
+		return application.PublishResult{}, fmt.Errorf("lỗi khởi tạo request tạo trang: %w", err)
 	}
 	req.Header.Set("Content-Type", "text/html; charset=utf-8")
 
 	res, err := client.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf("lỗi gửi request tạo trang OneNote: %w", err)
+		return application.PublishResult{}, fmt.Errorf("lỗi gửi request tạo trang OneNote: %w", err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		body, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
-		return "", "", fmt.Errorf("OneNote API (%d): %s", res.StatusCode, string(body))
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+		return application.PublishResult{}, fmt.Errorf("OneNote API lỗi (%d): %s", res.StatusCode, string(body))
 	}
 
 	var pageResp struct {
 		ID    string `json:"id"`
 		Links struct {
-			OneNoteWebUrl struct {
+			OneNoteWebURL struct {
 				Href string `json:"href"`
 			} `json:"oneNoteWebUrl"`
 		} `json:"links"`
 	}
-	_ = json.NewDecoder(res.Body).Decode(&pageResp)
-
-	// HẠ TẦNG MỚI: Assignment cần PageID thật để GET/PATCH nội dung về sau;
-	// URL web chỉ dùng để mở trang và không thể thay cho ID trong Graph API.
-	if pageResp.ID == "" {
-		return "", "", errors.New("OneNote tạo trang thành công nhưng không trả page ID")
+	if err := json.NewDecoder(res.Body).Decode(&pageResp); err != nil || pageResp.ID == "" {
+		return application.PublishResult{}, errors.New("tạo trang thành công nhưng OneNote không trả về PageID")
 	}
-	return pageResp.ID, workspaceID, nil
+
+	return application.PublishResult{
+		PageID:      pageResp.ID,
+		WorkspaceID: workspaceID,
+		PageWebURL:  pageResp.Links.OneNoteWebURL.Href,
+	}, nil
 }
 
-// ==================== HẠ TẦNG MỚI: OneNoteGateway chấm bài ====================
-
-func (c *Client) PublishStudentLesson(ctx context.Context, target application.WorkspaceTarget, lesson *domain.Lesson) (string, error) {
+func (c *Client) PublishStudentLesson(ctx context.Context, target application.WorkspaceTarget, lesson *domain.Lesson) (application.PublishResult, error) {
 	if lesson == nil {
-		return "", errors.New("lesson không được nil")
+		return application.PublishResult{}, errors.New("lesson không được nil")
 	}
-	pageID, _, err := c.PublishSession(ctx, target, domain.AudienceStudent, *lesson)
-	return pageID, err
+	return c.PublishSession(ctx, target, domain.AudienceStudent, *lesson)
 }
 
+// ==================== 3. THU BÀI & TRẢ NHẬN XÉT ====================
+
+// FetchStudentAnswers bóc tách chữ gõ, ảnh dán và đính kèm ảnh nét vẽ toàn trang
 func (c *Client) FetchStudentAnswers(ctx context.Context, assignment *domain.Assignment) error {
 	if assignment == nil || strings.TrimSpace(assignment.TargetPageID) == "" {
-		return errors.New("assignment thiếu OneNote page ID")
+		return errors.New("assignment thiếu TargetPageID")
 	}
 	client, err := c.getHTTPClient(ctx)
 	if err != nil {
 		return err
 	}
-	content, inkML, err := c.fetchPageHTMLAndInk(ctx, client, assignment.TargetPageID)
+
+	// 1. Tải HTML và InkML từ OneNote
+	contentHTML, inkData, err := c.fetchPageHTMLAndInk(ctx, client, assignment.TargetPageID)
 	if err != nil {
 		return err
 	}
 
-	exerciseIDs := make([]int, 0, len(assignment.Items))
-	for i := range assignment.Items {
-		exerciseIDs = append(exerciseIDs, assignment.Items[i].Exercise.ID)
+	// 2. Render nét vẽ tay thành 1 file ảnh toàn trang DUY NHẤT
+	if len(inkData) > 0 {
+		assignment.PageInkImage, _ = RenderInkMLToJPEG(inkData) // Lưu ở cấp bài tập (1 lần)
 	}
-	inkImages := make(map[int][]byte)
-	if len(inkML) > 0 {
-		boundaries := extractInkExerciseBoundaries(content, exerciseIDs)
-		inkImages, err = splitAndRenderInkPerExercise(inkML, boundaries, exerciseIDs)
-		if err != nil {
-			return fmt.Errorf("đọc nét bút OneNote: %w", err)
-		}
-	}
-	return c.populateStudentAnswers(ctx, client, assignment, content, inkImages, time.Now().UTC())
-}
 
-func (c *Client) populateStudentAnswers(
-	ctx context.Context,
-	client *http.Client,
-	assignment *domain.Assignment,
-	content string,
-	inkImages map[int][]byte,
-	extractedAt time.Time,
-) error {
+	extractedAt := time.Now().UTC()
+
+	// 3. Bóc tách nội dung riêng của từng câu hỏi
 	for i := range assignment.Items {
-		exerciseID := assignment.Items[i].Exercise.ID
-		answer := &domain.StudentAnswer{IsBlank: true, ExtractedAt: extractedAt}
-		answerHTML, found := extractAnswerBlock(content, exerciseID)
-		if found {
-			parsedAnswer, err := c.parseStudentAnswer(ctx, client, answerHTML, extractedAt)
-			if err != nil {
-				return fmt.Errorf("đọc bài làm câu %d: %w", exerciseID, err)
-			}
-			answer = parsedAnswer
+		item := &assignment.Items[i]
+		exerciseID := item.Exercise.ID
+
+		answer := &domain.StudentAnswer{
+			ChoiceSelection: domain.ChoiceNotApplicable,
+			ExtractedAt:     extractedAt,
 		}
-		// Ảnh có thể được học sinh đặt cạnh vùng bài làm thay vì nằm trong ô
-		// answer. Trang mới có wrapper cho toàn bộ câu để vẫn thu được các ảnh đó.
-		if regionHTML, regionFound := extractElementInnerByID(content, fmt.Sprintf("exercise-%d-region", exerciseID)); regionFound {
-			region, err := c.parseStudentAnswer(ctx, client, regionHTML, extractedAt)
-			if err != nil {
-				return fmt.Errorf("đọc ảnh trong vùng câu %d: %w", exerciseID, err)
-			}
-			for _, image := range region.Images {
-				answer.Images = appendUniqueImage(answer.Images, image)
+
+		// A. Bóc tách text và ảnh dán trong ô làm bài của câu này
+		if answerHTML, found := extractElementInnerByID(contentHTML, fmt.Sprintf("exercise-%d-answer-content", exerciseID)); found {
+			parsed, err := c.parseStudentAnswer(ctx, client, answerHTML, extractedAt)
+			if err == nil {
+				answer.Text = parsed.Text
+				answer.Images = append(answer.Images, parsed.Images...)
 			}
 		}
-		if inkImage := inkImages[exerciseID]; len(inkImage) > 0 {
-			answer.Images = appendUniqueImage(answer.Images, inkImage)
+
+		// Lựa chọn A/B/C/D là một trạng thái nghiệp vụ riêng, không trộn vào bài
+		// trình bày. Logic chấm sẽ chặn chưa chọn/chọn nhiều trước khi gọi Gemini.
+		if len(item.Exercise.Options) > 0 {
+			answer.ChoiceSelection = domain.ChoiceUnselected
+			if choiceHTML, found := extractElementInnerByID(contentHTML, fmt.Sprintf("exercise-%d-choice", exerciseID)); found {
+				switch selected := extractSelectedOptions(choiceHTML); len(selected) {
+				case 1:
+					answer.ChoiceSelection = domain.ChoiceSelected
+					answer.SelectedOption = selected[0]
+				default:
+					if len(selected) > 1 {
+						answer.ChoiceSelection = domain.ChoiceMultiple
+					}
+				}
+			}
 		}
-		answer.IsBlank = answer.IsBlank && len(answer.Images) == 0
-		assignment.Items[i].StudentAnswer = answer
+
+		// B. Bóc tách thêm ảnh nếu dán lệch ra ngoài ô làm bài của câu này
+		if regionHTML, found := extractElementInnerByID(contentHTML, fmt.Sprintf("exercise-%d-region", exerciseID)); found {
+			parsed, err := c.parseStudentAnswer(ctx, client, regionHTML, extractedAt)
+			if err == nil {
+				for _, img := range parsed.Images {
+					answer.Images = appendUniqueImage(answer.Images, img)
+				}
+			}
+		}
+
+		item.StudentAnswer = answer
 	}
 	return nil
 }
 
+// PatchFeedback chèn hộp nhận xét vào đúng thẻ chờ <div data-id="exercise-X-feedback"></div>
 func (c *Client) PatchFeedback(ctx context.Context, assignment *domain.Assignment) error {
 	if assignment == nil || strings.TrimSpace(assignment.TargetPageID) == "" {
-		return errors.New("assignment thiếu OneNote page ID")
+		return errors.New("assignment thiếu TargetPageID")
 	}
 	client, err := c.getHTTPClient(ctx)
 	if err != nil {
 		return err
 	}
+
 	pageHTML, err := c.fetchPageHTML(ctx, client, assignment.TargetPageID)
 	if err != nil {
 		return err
 	}
-	commands, err := buildFeedbackPatchCommands(pageHTML, assignment)
-	if err != nil {
-		return err
+
+	commands := make([]map[string]string, 0, len(assignment.Items))
+	missingTargets := make([]int, 0)
+	eligibleCount := 0
+
+	for _, item := range assignment.Items {
+		if item.Result == nil || item.Result.Status == domain.AIExerciseSkippedEmpty {
+			continue
+		}
+		eligibleCount++
+
+		// Tìm thẻ feedback hiện tại. Bản cũ thay placeholder bằng ID chung,
+		// nên cần fallback tìm card bên trong đúng exercise region.
+		targetID, found := findFeedbackTargetID(pageHTML, item.Exercise.ID)
+		if !found {
+			missingTargets = append(missingTargets, item.Exercise.ID)
+			continue
+		}
+
+		// Tạo HTML hộp nhận xét
+		feedbackBoxHTML := renderFeedbackCard(item.Exercise.ID, item.Result)
+
+		commands = append(commands, map[string]string{
+			"target":  targetID,
+			"action":  "replace",
+			"content": feedbackBoxHTML,
+		})
 	}
-	if len(commands) == 0 {
+
+	if eligibleCount == 0 {
 		return nil
 	}
+	if len(missingTargets) > 0 {
+		return fmt.Errorf("không tìm thấy vị trí nhận xét OneNote cho các câu: %v", missingTargets)
+	}
+
 	payload, err := json.Marshal(commands)
 	if err != nil {
 		return err
 	}
+
 	endpoint := fmt.Sprintf("%s/pages/%s/content", graphAPIBase, url.PathEscape(assignment.TargetPageID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("đẩy nhận xét lên OneNote: %w", err)
+		return fmt.Errorf("gửi lệnh PATCH feedback: %w", err)
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return fmt.Errorf("OneNote PATCH API (%d): %s", resp.StatusCode, string(body))
 	}
+
 	return nil
 }
 
-func buildFeedbackPatchCommands(pageHTML string, assignment *domain.Assignment) ([]map[string]string, error) {
-	legacyTableTargets := findGeneratedTableIDs(pageHTML)
+// ==================== 4. HELPER FUNCTIONS ====================
 
-	commands := make([]map[string]string, 0, len(assignment.Items))
-	for itemIndex, item := range assignment.Items {
-		if item.Result == nil {
-			continue
-		}
-		// Không replace vùng làm bài của câu bỏ trống. Học sinh phải tiếp tục
-		// viết được vào đúng khung ban đầu và có thể yêu cầu chấm lại sau đó.
-		if item.Result.Status == domain.AIExerciseSkippedEmpty {
-			continue
-		}
-		exerciseID := strconv.Itoa(item.Exercise.ID)
-		answerContent := `<p><em>Bài làm:</em> Chưa làm</p>`
-		if currentAnswer, found := extractAnswerBlock(pageHTML, item.Exercise.ID); found && !isBlankAnswerHTML(currentAnswer) {
-			answerContent = currentAnswer
-		}
-		content := buildWorkTable(exerciseID, answerContent, item.Result)
-		generatedID, found := findGeneratedIDByDataID(pageHTML, "exercise-"+exerciseID+"-work")
-		if !found && itemIndex < len(legacyTableTargets) {
-			generatedID, found = legacyTableTargets[itemIndex], true
-		}
-		if !found {
-			return nil, fmt.Errorf("trang OneNote chưa có vùng bài làm cập nhật được cho câu %s; vui lòng giao lại bài bằng phiên bản mới", exerciseID)
-		}
-		commands = append(commands, map[string]string{
-			"target": generatedID, "action": "replace", "content": content,
-		})
+func renderFeedbackCard(exerciseID int, result *domain.GradingResult) string {
+	borderColor := "#16a34a" // Xanh lá
+	badgeColor := "#15803d"
+	badgeText := "✅ Đúng"
+	feedbackHTML := ""
+	if strings.TrimSpace(result.FeedbackHTML) != "" {
+		feedbackHTML = compactFeedbackHTML(result.FeedbackHTML)
 	}
-	return commands, nil
+
+	if result.Status == domain.AIExerciseAwaitingSelection {
+		borderColor = "#f59e0b" // Cam: học sinh cần chọn lại đáp án
+		badgeColor = "#b45309"
+		badgeText = "⚠️ Chưa hoàn tất"
+	} else if !result.IsCorrect {
+		borderColor = "#dc2626" // Đỏ
+		badgeColor = "#b91c1c"
+		badgeText = "❌ Cần sửa"
+	}
+
+	return fmt.Sprintf(
+		`<div data-id="exercise-%d-feedback" style="width:246px; background:#f8fafc; border:1px solid #e2e8f0; border-left:4px solid %s; padding:6pt 8pt; margin:0; border-radius:0 4px 4px 0; word-wrap:break-word;">`+
+			`<p style="margin:0 0 2pt 0; font-weight:bold; color:%s;">%s</p>`+
+			`<div style="color:#1e293b; font-size:9pt; line-height:1.25;">%s</div>`+
+			`</div>`,
+		exerciseID, borderColor, badgeColor, badgeText, feedbackHTML,
+	)
+}
+
+func extractSelectedOptions(rawHTML string) []string {
+	doc, err := xhtml.Parse(strings.NewReader("<html><body>" + rawHTML + "</body></html>"))
+	if err != nil {
+		return nil
+	}
+
+	selected := make([]string, 0, 1)
+	var walk func(*xhtml.Node)
+	walk = func(node *xhtml.Node) {
+		// OneNote chuyển <p data-tag> ở HTML đầu vào thành <span data-tag>
+		// trong HTML trả về, nên không được giới hạn ở riêng thẻ p.
+		if node.Type == xhtml.ElementNode {
+			var id, tag string
+			for _, attr := range node.Attr {
+				switch strings.ToLower(attr.Key) {
+				case "data-id":
+					id = attr.Val
+				case "data-tag":
+					tag = strings.ToLower(attr.Val)
+				}
+			}
+			if strings.HasPrefix(tag, "to-do:completed") {
+				if index := strings.LastIndex(id, "-option-"); index >= 0 {
+					option := strings.TrimSpace(id[index+len("-option-"):])
+					if option != "" {
+						selected = append(selected, option)
+					}
+				}
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(doc)
+	return selected
+}
+
+func (c *Client) parseStudentAnswer(ctx context.Context, client *http.Client, rawHTML string, extractedAt time.Time) (*domain.StudentAnswer, error) {
+	doc, err := xhtml.Parse(strings.NewReader("<html><body>" + rawHTML + "</body></html>"))
+	if err != nil {
+		return nil, err
+	}
+
+	var textParts []string
+	var imageURLs []string
+
+	var walk func(*xhtml.Node)
+	walk = func(n *xhtml.Node) {
+		if n.Type == xhtml.TextNode {
+			val := strings.TrimSpace(stdhtml.UnescapeString(n.Data))
+			// Chỉ bỏ qua đúng dòng văn bản placeholder hướng dẫn mặc định của hệ thống
+			if val != "" && !strings.HasPrefix(val, "✍️ Bài làm (Gõ chữ") {
+				textParts = append(textParts, val)
+			}
+		}
+		if n.Type == xhtml.ElementNode && n.Data == "img" {
+			src := ""
+			for _, a := range n.Attr {
+				if a.Key == "data-fullres-src" && strings.TrimSpace(a.Val) != "" {
+					src = a.Val
+					break
+				}
+				if a.Key == "src" && strings.TrimSpace(a.Val) != "" {
+					src = a.Val
+				}
+			}
+			if src != "" {
+				imageURLs = append(imageURLs, src)
+			}
+		}
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(doc)
+
+	images := make([][]byte, 0, len(imageURLs))
+	for _, imgURL := range imageURLs {
+		if data, err := c.fetchAnswerImage(ctx, client, imgURL); err == nil && len(data) > 0 {
+			images = append(images, data)
+		}
+	}
+
+	return &domain.StudentAnswer{
+		Text:        strings.Join(textParts, " "),
+		Images:      images,
+		ExtractedAt: extractedAt,
+	}, nil
+}
+
+func (c *Client) fetchAnswerImage(ctx context.Context, client *http.Client, rawURL string) ([]byte, error) {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Scheme != "https" {
+		return nil, errors.New("URL không hợp lệ")
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return nil, fmt.Errorf("OneNote Image API (%d)", resp.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+}
+
+func isBlankAnswer(text string, images [][]byte) bool {
+	if len(images) > 0 {
+		return false
+	}
+	clean := strings.TrimSpace(text)
+	clean = strings.ReplaceAll(strings.ToLower(clean), "bài làm:", "")
+	clean = strings.ReplaceAll(strings.ToLower(clean), "bài làm", "")
+	clean = strings.Map(func(r rune) rune {
+		switch r {
+		case '.', '…', '_', '-', '*', ' ', '\t', '\n', '\r', '\u00a0':
+			return -1
+		default:
+			return r
+		}
+	}, clean)
+	return strings.TrimSpace(clean) == ""
+}
+
+func sanitizeFeedbackHTML(value string) string {
+	value = unsafeHTMLBlockPattern.ReplaceAllString(value, "")
+	value = unsafeHTMLAttrPattern.ReplaceAllString(value, "")
+	if strings.TrimSpace(value) == "" {
+		return `<p>Không có nhận xét chi tiết.</p>`
+	}
+	return value
+}
+
+// Giới hạn feedback dù AI trả về dài: hộp bên phải phải luôn thấp hơn vùng
+// làm bài để không làm tăng chiều cao hàng và đẩy câu kế tiếp xuống dưới.
+func compactFeedbackHTML(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return `<p>Chưa có nhận xét cụ thể.</p>`
+	}
+	value = sanitizeFeedbackHTML(value)
+	doc, err := xhtml.Parse(strings.NewReader("<html><body>" + value + "</body></html>"))
+	if err != nil {
+		return `<p>Không có nhận xét.</p>`
+	}
+
+	paragraphs := make([]string, 0, 2)
+	var collectText func(*xhtml.Node) string
+	collectText = func(node *xhtml.Node) string {
+		var text strings.Builder
+		var walk func(*xhtml.Node)
+		walk = func(current *xhtml.Node) {
+			if current.Type == xhtml.TextNode {
+				text.WriteString(current.Data)
+			}
+			for child := current.FirstChild; child != nil; child = child.NextSibling {
+				walk(child)
+			}
+		}
+		walk(node)
+		return strings.Join(strings.Fields(stdhtml.UnescapeString(text.String())), " ")
+	}
+	var walk func(*xhtml.Node)
+	walk = func(node *xhtml.Node) {
+		if node.Type == xhtml.ElementNode && node.Data == "p" && len(paragraphs) < 2 {
+			if text := collectText(node); text != "" {
+				paragraphs = append(paragraphs, truncateRunes(text, 90))
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			walk(child)
+		}
+	}
+	walk(doc)
+	if len(paragraphs) == 0 {
+		if text := collectText(doc); text != "" {
+			paragraphs = append(paragraphs, truncateRunes(text, 90))
+		}
+	}
+	if len(paragraphs) == 0 {
+		return `<p>Không có nhận xét.</p>`
+	}
+
+	var result strings.Builder
+	for _, paragraph := range paragraphs {
+		result.WriteString("<p style=\"margin:0 0 2pt 0;\">")
+		result.WriteString(escapeFeedbackHTML(paragraph))
+		result.WriteString("</p>")
+	}
+	return result.String()
+}
+
+func truncateRunes(text string, limit int) string {
+	runes := []rune(strings.TrimSpace(text))
+	if len(runes) <= limit {
+		return string(runes)
+	}
+	return string(runes[:limit-1]) + "…"
+}
+
+func escapeFeedbackHTML(text string) string {
+	text = strings.ReplaceAll(text, "&", "&amp;")
+	text = strings.ReplaceAll(text, "<", "&lt;")
+	text = strings.ReplaceAll(text, ">", "&gt;")
+	text = strings.ReplaceAll(text, `"`, "&quot;")
+	return text
 }
 
 func appendUniqueImage(images [][]byte, candidate []byte) [][]byte {
@@ -391,307 +630,181 @@ func appendUniqueImage(images [][]byte, candidate []byte) [][]byte {
 	return append(images, candidate)
 }
 
-func (c *Client) parseStudentAnswer(ctx context.Context, client *http.Client, answerHTML string, extractedAt time.Time) (*domain.StudentAnswer, error) {
-	document, err := xhtml.Parse(strings.NewReader("<html><body>" + answerHTML + "</body></html>"))
-	if err != nil {
-		return nil, err
-	}
-	var textParts []string
-	var imageURLs []string
-	var walk func(*xhtml.Node)
-	walk = func(node *xhtml.Node) {
-		if node.Type == xhtml.TextNode {
-			if value := strings.TrimSpace(stdhtml.UnescapeString(node.Data)); value != "" {
-				textParts = append(textParts, value)
-			}
-		}
-		if node.Type == xhtml.ElementNode && node.Data == "img" {
-			imageSource := ""
-			fullResolutionSource := ""
-			for _, attribute := range node.Attr {
-				if attribute.Key == "data-fullres-src" && strings.TrimSpace(attribute.Val) != "" {
-					fullResolutionSource = attribute.Val
-				}
-				if attribute.Key == "src" && strings.TrimSpace(attribute.Val) != "" {
-					imageSource = attribute.Val
-				}
-			}
-			if fullResolutionSource != "" {
-				imageURLs = append(imageURLs, fullResolutionSource)
-			} else if imageSource != "" {
-				imageURLs = append(imageURLs, imageSource)
-			}
-		}
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			walk(child)
-		}
-	}
-	walk(document)
-
-	images := make([][]byte, 0, len(imageURLs))
-	for _, imageURL := range imageURLs {
-		data, err := c.fetchAnswerImage(ctx, client, imageURL)
-		if err != nil {
-			return nil, err
-		}
-		images = append(images, data)
-	}
-	text := strings.Join(textParts, " ")
-	return &domain.StudentAnswer{
-		Text:        text,
-		Images:      images,
-		IsBlank:     isBlankAnswerHTML(answerHTML) && len(images) == 0,
-		ExtractedAt: extractedAt,
-	}, nil
-}
-
-func (c *Client) fetchAnswerImage(ctx context.Context, client *http.Client, rawURL string) ([]byte, error) {
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || parsed.Scheme != "https" {
-		return nil, errors.New("URL ảnh bài làm không hợp lệ")
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if host != "graph.microsoft.com" && host != "www.onenote.com" && !strings.HasSuffix(host, ".onenote.com") {
-		return nil, fmt.Errorf("không tải ảnh từ host không tin cậy %q", host)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("tải ảnh bài làm: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return nil, fmt.Errorf("OneNote image API (%d)", resp.StatusCode)
-	}
-	const maxImageSize = 10 << 20
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageSize+1))
-	if err != nil {
-		return nil, err
-	}
-	if len(data) > maxImageSize {
-		return nil, errors.New("ảnh bài làm vượt quá 10 MB")
-	}
-	return data, nil
-}
-
-func buildWorkTable(exerciseID, answerContent string, result *domain.GradingResult) string {
-	if result.Status == domain.AIExerciseSkippedEmpty {
-		// Câu chưa làm giữ nguyên toàn chiều rộng. Replace một ô đồng thời dọn
-		// cột “Chưa làm” đã được phiên bản cũ chèn vào.
-		return `<table data-id="exercise-` + exerciseID + `-work" width="760" border="0" cellspacing="0" cellpadding="0" style="width:760px;border-collapse:collapse;margin:8pt 0 14pt;"><tr>` +
-			`<td width="760" style="width:760px;padding:0;vertical-align:top;"><div data-id="exercise-` + exerciseID + `-answer-content">` + answerContent + `</div></td></tr></table>`
-	}
-	var feedback strings.Builder
-	feedback.WriteString(`<div data-id="exercise-` + exerciseID + `-feedback">`)
-	feedback.WriteString(`<p style="margin:0 0 8pt;"><strong>Nhận xét:</strong> `)
-	if result.IsCorrect {
-		feedback.WriteString(`<span style="color:#15803d;">Đúng</span></p>`)
-	} else {
-		feedback.WriteString(`<span style="color:#b91c1c;">Cần sửa</span></p>`)
-	}
-	feedback.WriteString(sanitizeFeedbackHTML(result.FeedbackHTML))
-	feedback.WriteString(`</div>`)
-	return `<table data-id="exercise-` + exerciseID + `-work" width="760" style="width:760px;border-collapse:collapse;margin:8pt 0 14pt;"><tr>` +
-		`<td width="450" style="vertical-align:top;padding:10pt;border:1px solid #cbd5e1;"><div data-id="exercise-` + exerciseID + `-answer-content">` + answerContent + `</div></td>` +
-		`<td width="310" style="vertical-align:top;padding:10pt;border:1px solid #cbd5e1;background:#f8fafc;">` + feedback.String() + `</td>` +
-		`</tr></table>`
-}
-
-func (c *Client) fetchPageHTML(ctx context.Context, client *http.Client, pageID string) (string, error) {
-	endpoint := fmt.Sprintf("%s/pages/%s/content?includeIDs=true", graphAPIBase, url.PathEscape(pageID))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		return "", err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("lấy cấu trúc trang OneNote: %w", err)
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return "", fmt.Errorf("OneNote content API (%d): %s", resp.StatusCode, string(body))
-	}
-	return string(body), nil
-}
-
-func addExerciseMarkers(markdown string) string {
-	if strings.Contains(markdown, ":ANSWER]]") {
-		return markdown
-	}
-	var out strings.Builder
-	currentExerciseID := 0
-	for _, line := range strings.Split(markdown, "\n") {
-		if match := exerciseHeadingPattern.FindStringSubmatch(strings.TrimSpace(line)); match != nil {
-			if currentExerciseID > 0 {
-				out.WriteString(fmt.Sprintf("[[EXERCISE:%d:FEEDBACK]]\n", currentExerciseID))
-				out.WriteString(fmt.Sprintf("[[EXERCISE:%d:END]]\n", currentExerciseID))
-			}
-			currentExerciseID, _ = strconv.Atoi(match[1])
-			out.WriteString(fmt.Sprintf("[[EXERCISE:%d:START]]\n", currentExerciseID))
-		}
-		if currentExerciseID > 0 && strings.Contains(strings.ToLower(line), "bài làm") {
-			out.WriteString(fmt.Sprintf("[[EXERCISE:%d:ANSWER]]\n", currentExerciseID))
-		}
-		out.WriteString(line)
-		out.WriteByte('\n')
-	}
-	if currentExerciseID > 0 {
-		out.WriteString(fmt.Sprintf("[[EXERCISE:%d:FEEDBACK]]\n", currentExerciseID))
-		out.WriteString(fmt.Sprintf("[[EXERCISE:%d:END]]\n", currentExerciseID))
-	}
-	return out.String()
-}
-
-func extractAnswerBlock(pageHTML string, exerciseID int) (string, bool) {
-	if answer, ok := extractElementInnerByID(pageHTML, fmt.Sprintf("exercise-%d-answer-content", exerciseID)); ok {
-		return answer, true
-	}
-	if answer, ok := extractElementInnerByID(pageHTML, fmt.Sprintf("exercise-%d-work", exerciseID)); ok {
-		return answer, true
-	}
-	// Tương thích trang cũ đã tạo trước khi marker được chuyển thành HTML id.
-	marker := fmt.Sprintf("[[EXERCISE:%d:ANSWER]]", exerciseID)
-	start := strings.Index(pageHTML, marker)
-	if start < 0 {
-		return "", false
-	}
-	start += len(marker)
-	end := strings.Index(pageHTML[start:], "[[EXERCISE:")
-	if end < 0 {
-		end = len(pageHTML) - start
-	}
-	return strings.TrimSpace(pageHTML[start : start+end]), true
-}
-
 func extractElementInnerByID(pageHTML, targetID string) (string, bool) {
-	document, err := xhtml.Parse(strings.NewReader(pageHTML))
+	doc, err := xhtml.Parse(strings.NewReader(pageHTML))
 	if err != nil {
 		return "", false
 	}
 	var target *xhtml.Node
 	var walk func(*xhtml.Node)
-	walk = func(node *xhtml.Node) {
+	walk = func(n *xhtml.Node) {
 		if target != nil {
 			return
 		}
-		if node.Type == xhtml.ElementNode {
-			for _, attribute := range node.Attr {
-				if (attribute.Key == "id" || attribute.Key == "data-id") && attribute.Val == targetID {
-					target = node
+		if n.Type == xhtml.ElementNode {
+			for _, a := range n.Attr {
+				if (a.Key == "id" || a.Key == "data-id") && a.Val == targetID {
+					target = n
 					return
 				}
 			}
 		}
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
 			walk(child)
 		}
 	}
-	walk(document)
+	walk(doc)
 	if target == nil {
 		return "", false
 	}
 	var result strings.Builder
 	for child := target.FirstChild; child != nil; child = child.NextSibling {
-		if err := xhtml.Render(&result, child); err != nil {
-			return "", false
-		}
+		xhtml.Render(&result, child)
 	}
 	return strings.TrimSpace(result.String()), true
 }
 
 func findGeneratedIDByDataID(pageHTML, dataID string) (string, bool) {
-	document, err := xhtml.Parse(strings.NewReader(pageHTML))
+	doc, err := xhtml.Parse(strings.NewReader(pageHTML))
 	if err != nil {
 		return "", false
 	}
 	var generatedID string
 	var walk func(*xhtml.Node)
-	walk = func(node *xhtml.Node) {
+	walk = func(n *xhtml.Node) {
 		if generatedID != "" {
 			return
 		}
-		if node.Type == xhtml.ElementNode {
-			matches := false
-			candidate := ""
-			for _, attribute := range node.Attr {
-				switch attribute.Key {
-				case "data-id":
-					matches = attribute.Val == dataID
-				case "id":
-					candidate = attribute.Val
+		if n.Type == xhtml.ElementNode {
+			isMatch := false
+			idVal := ""
+			for _, a := range n.Attr {
+				if a.Key == "data-id" && a.Val == dataID {
+					isMatch = true
+				}
+				if a.Key == "id" {
+					idVal = a.Val
 				}
 			}
-			if matches && candidate != "" {
-				generatedID = candidate
+			if isMatch && idVal != "" {
+				generatedID = idVal
 				return
 			}
 		}
-		for child := node.FirstChild; child != nil; child = child.NextSibling {
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
 			walk(child)
 		}
 	}
-	walk(document)
+	walk(doc)
 	return generatedID, generatedID != ""
 }
 
-// findGeneratedTableIDs hỗ trợ các trang được tạo ở phiên bản bảng cũ, khi
-// OneNote đã loại thuộc tính id đầu vào nhưng vẫn sinh ID riêng cho mỗi bảng.
-func findGeneratedTableIDs(pageHTML string) []string {
-	document, err := xhtml.Parse(strings.NewReader(pageHTML))
-	if err != nil {
-		return nil
+func findFeedbackTargetID(pageHTML string, exerciseID int) (string, bool) {
+	if id, found := findGeneratedIDByDataID(pageHTML, fmt.Sprintf("exercise-%d-feedback", exerciseID)); found {
+		return id, true
 	}
-	targets := make([]string, 0)
-	var walk func(*xhtml.Node)
-	walk = func(node *xhtml.Node) {
-		if node.Type == xhtml.ElementNode && node.Data == "table" {
-			for _, attribute := range node.Attr {
-				if attribute.Key == "id" && strings.HasPrefix(attribute.Val, "table:") {
-					targets = append(targets, attribute.Val)
-					break
+
+	doc, err := xhtml.Parse(strings.NewReader(pageHTML))
+	if err != nil {
+		return "", false
+	}
+	regionID := fmt.Sprintf("exercise-%d-region", exerciseID)
+	var region *xhtml.Node
+	var findRegion func(*xhtml.Node)
+	findRegion = func(node *xhtml.Node) {
+		if region != nil {
+			return
+		}
+		if node.Type == xhtml.ElementNode && hasHTMLAttribute(node, "data-id", regionID) {
+			region = node
+			return
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			findRegion(child)
+		}
+	}
+	findRegion(doc)
+	if region == nil {
+		return "", false
+	}
+
+	var generatedID string
+	var findLegacyCard func(*xhtml.Node)
+	findLegacyCard = func(node *xhtml.Node) {
+		if generatedID != "" {
+			return
+		}
+		if node.Type == xhtml.ElementNode && hasHTMLAttribute(node, "data-id", "exercise-feedback-result") {
+			for _, attr := range node.Attr {
+				if attr.Key == "id" && strings.TrimSpace(attr.Val) != "" {
+					generatedID = attr.Val
+					return
 				}
 			}
 		}
 		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			walk(child)
+			findLegacyCard(child)
 		}
 	}
-	walk(document)
-	return targets
+	findLegacyCard(region)
+	return generatedID, generatedID != ""
 }
 
-func isBlankAnswerHTML(answerHTML string) bool {
-	if strings.Contains(strings.ToLower(answerHTML), "<img") {
-		return false
-	}
-	plain := stdhtml.UnescapeString(htmlTagPattern.ReplaceAllString(answerHTML, " "))
-	plain = strings.ReplaceAll(strings.ToLower(plain), "bài làm:", "")
-	plain = strings.Map(func(r rune) rune {
-		switch r {
-		case '.', '…', '_', '-', '*', ' ', '\t', '\n', '\r', '\u00a0':
-			return -1
-		default:
-			return r
+func hasHTMLAttribute(node *xhtml.Node, key, value string) bool {
+	for _, attr := range node.Attr {
+		if attr.Key == key && attr.Val == value {
+			return true
 		}
-	}, plain)
-	return strings.TrimSpace(plain) == ""
+	}
+	return false
 }
 
-func sanitizeFeedbackHTML(value string) string {
-	value = unsafeHTMLBlockPattern.ReplaceAllString(value, "")
-	value = unsafeHTMLAttrPattern.ReplaceAllString(value, "")
-	value = verboseFeedbackPattern.ReplaceAllString(value, "")
-	if strings.TrimSpace(value) == "" {
-		return `<p>Không có nhận xét chi tiết.</p>`
+func (c *Client) fetchPageHTML(ctx context.Context, client *http.Client, pageID string) (string, error) {
+	endpoint := fmt.Sprintf("%s/pages/%s/content?includeIDs=true", graphAPIBase, url.PathEscape(pageID))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
 	}
-	return value
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	return string(body), nil
+}
+
+func (c *Client) DumpStudentAnswersDebug(assignment *domain.Assignment) (string, error) {
+	if assignment == nil {
+		return "", errors.New("assignment nil")
+	}
+
+	safePageID := debugPathUnsafePattern.ReplaceAllString(assignment.TargetPageID, "_")
+	timestamp := time.Now().Format("20060102_150405")
+	sessionDir := filepath.Join(answerDebugSnapshotRoot, fmt.Sprintf("page_%s_%s", safePageID, timestamp))
+
+	if err := os.MkdirAll(sessionDir, 0755); err != nil {
+		return "", err
+	}
+
+	for i, item := range assignment.Items {
+		exDir := filepath.Join(sessionDir, fmt.Sprintf("cau_%d_id_%d", i+1, item.Exercise.ID))
+		_ = os.MkdirAll(exDir, 0755)
+
+		var summary strings.Builder
+		summary.WriteString(fmt.Sprintf("=== CÂU %d (ID: %d) ===\n", i+1, item.Exercise.ID))
+		summary.WriteString(fmt.Sprintf("Đề bài:\n%s\n\n", item.Exercise.Question))
+		if item.StudentAnswer != nil {
+			summary.WriteString(fmt.Sprintf("Text: \"%s\"\n", item.StudentAnswer.Text))
+			summary.WriteString(fmt.Sprintf("Images count: %d\n", len(item.StudentAnswer.Images)))
+		}
+		_ = os.WriteFile(filepath.Join(exDir, "summary.txt"), []byte(summary.String()), 0644)
+
+		if item.StudentAnswer != nil {
+			for imgIdx, imgBytes := range item.StudentAnswer.Images {
+				_ = os.WriteFile(filepath.Join(exDir, fmt.Sprintf("image_%d.jpg", imgIdx+1)), imgBytes, 0644)
+			}
+		}
+	}
+
+	return sessionDir, nil
 }
 
 func (c *Client) resolveNotebook(ctx context.Context, client *http.Client, target application.WorkspaceTarget) (string, error) {
@@ -700,9 +813,8 @@ func (c *Client) resolveNotebook(ctx context.Context, client *http.Client, targe
 	}
 	name := sanitizeNotebookName(pointerValue(target.WorkspaceName))
 	if name == "" {
-		return "", errors.New("thiếu workspace_id hoặc workspace_name")
+		return "", errors.New("thiếu tên notebook để tạo mới")
 	}
-
 	endpoint := graphAPIBase + "/notebooks?$select=id,displayName"
 	var notebooks struct {
 		Value []struct {
@@ -711,37 +823,40 @@ func (c *Client) resolveNotebook(ctx context.Context, client *http.Client, targe
 		} `json:"value"`
 	}
 	if err := c.getJSON(ctx, client, endpoint, &notebooks); err != nil {
-		return "", fmt.Errorf("liệt kê Notebook: %w", err)
+		return "", fmt.Errorf("lấy danh sách notebook: %w", err)
 	}
-	for _, notebook := range notebooks.Value {
-		if strings.EqualFold(strings.TrimSpace(notebook.DisplayName), name) {
-			return notebook.ID, nil
+	for _, nb := range notebooks.Value {
+		if strings.EqualFold(strings.TrimSpace(nb.DisplayName), strings.TrimSpace(name)) {
+			return nb.ID, nil
 		}
 	}
 
 	body, err := json.Marshal(map[string]string{"displayName": name})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("mã hoá tên notebook: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, graphAPIBase+"/notebooks", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("khởi tạo request tạo notebook: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("tạo Notebook: %w", err)
+		return "", fmt.Errorf("gửi request tạo notebook: %w", err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode > 299 {
-		responseBody, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
-		return "", fmt.Errorf("OneNote create Notebook API (%d): %s", res.StatusCode, string(responseBody))
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+		return "", fmt.Errorf("OneNote API tạo notebook lỗi (%d): %s", res.StatusCode, string(body))
 	}
 	var created struct {
 		ID string `json:"id"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&created); err != nil || strings.TrimSpace(created.ID) == "" {
-		return "", errors.New("OneNote tạo Notebook nhưng không trả notebook ID")
+	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
+		return "", fmt.Errorf("đọc phản hồi tạo notebook: %w", err)
+	}
+	if strings.TrimSpace(created.ID) == "" {
+		return "", errors.New("OneNote tạo notebook thành công nhưng không trả về notebook ID")
 	}
 	return created.ID, nil
 }
@@ -751,15 +866,11 @@ func (c *Client) resolveSection(ctx context.Context, client *http.Client, notebo
 		return id, nil
 	}
 	name := strings.TrimSpace(pointerValue(target.ChapterName))
-	if name == "" {
-		return "", errors.New("thiếu chapter_id hoặc chapter_name")
-	}
 	return c.ensureSection(ctx, client, notebookID, name)
 }
 
 func (c *Client) ensureSection(ctx context.Context, client *http.Client, notebookID, chapterName string) (string, error) {
 	chapterName = sanitizeSectionName(chapterName)
-
 	endpoint := fmt.Sprintf("%s/notebooks/%s/sections?$select=id,displayName", graphAPIBase, url.PathEscape(notebookID))
 	var resp struct {
 		Value []struct {
@@ -767,9 +878,8 @@ func (c *Client) ensureSection(ctx context.Context, client *http.Client, noteboo
 			DisplayName string `json:"displayName"`
 		} `json:"value"`
 	}
-
 	if err := c.getJSON(ctx, client, endpoint, &resp); err != nil {
-		return "", fmt.Errorf("liệt kê Section: %w", err)
+		return "", fmt.Errorf("lấy danh sách section: %w", err)
 	}
 	for _, s := range resp.Value {
 		if strings.EqualFold(strings.TrimSpace(s.DisplayName), strings.TrimSpace(chapterName)) {
@@ -778,43 +888,39 @@ func (c *Client) ensureSection(ctx context.Context, client *http.Client, noteboo
 	}
 
 	createEndpoint := fmt.Sprintf("%s/notebooks/%s/sections", graphAPIBase, url.PathEscape(notebookID))
-	reqBody, _ := json.Marshal(map[string]string{"displayName": chapterName})
-
+	reqBody, err := json.Marshal(map[string]string{"displayName": chapterName})
+	if err != nil {
+		return "", fmt.Errorf("mã hoá tên section: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, createEndpoint, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("khởi tạo request tạo section: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-
 	res, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("gửi request tạo section: %w", err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode > 299 {
-		responseBody, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
-		return "", fmt.Errorf("OneNote create Section API (%d): %s", res.StatusCode, string(responseBody))
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+		return "", fmt.Errorf("OneNote API tạo section lỗi (%d): %s", res.StatusCode, string(body))
 	}
 
 	var newSec struct {
 		ID string `json:"id"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&newSec); err != nil || newSec.ID == "" {
-		return "", fmt.Errorf("không thể tạo chương '%s'", chapterName)
+	if err := json.NewDecoder(res.Body).Decode(&newSec); err != nil {
+		return "", fmt.Errorf("đọc phản hồi tạo section: %w", err)
 	}
-
+	if strings.TrimSpace(newSec.ID) == "" {
+		return "", errors.New("OneNote tạo section thành công nhưng không trả về section ID")
+	}
 	return newSec.ID, nil
 }
 
-func pointerValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func (c *Client) getJSON(ctx context.Context, client *http.Client, url string, target any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func (c *Client) getJSON(ctx context.Context, client *http.Client, endpoint string, target any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err
 	}
@@ -823,12 +929,23 @@ func (c *Client) getJSON(ctx context.Context, client *http.Client, url string, t
 		return err
 	}
 	defer res.Body.Close()
-
-	if res.StatusCode < 200 || res.StatusCode > 299 {
-		body, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
-		return fmt.Errorf("OneNote API lỗi %d: %s", res.StatusCode, string(body))
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+		return fmt.Errorf("OneNote API lỗi (%d): %s", res.StatusCode, string(body))
 	}
 	return json.NewDecoder(res.Body).Decode(target)
+}
+
+func sanitizeNotebookName(name string) string {
+	invalidChars := []string{"?", "*", "\\", "/", ":", "<", ">", "|", "'", `"`}
+	for _, char := range invalidChars {
+		name = strings.ReplaceAll(name, char, " ")
+	}
+	name = strings.TrimSpace(name)
+	if len([]rune(name)) > 128 {
+		name = string([]rune(name)[:128])
+	}
+	return name
 }
 
 func sanitizeSectionName(name string) string {
@@ -836,22 +953,15 @@ func sanitizeSectionName(name string) string {
 	for _, ch := range invalidChars {
 		name = strings.ReplaceAll(name, ch, " ")
 	}
-	name = strings.TrimSpace(name)
-	if name == "" {
+	if strings.TrimSpace(name) == "" {
 		name = "Chương mới"
 	}
-	return name
+	return strings.TrimSpace(name)
 }
 
-func sanitizeNotebookName(name string) string {
-	invalidChars := []string{"?", "*", "\\", "/", ":", "<", ">", "|", "'", "\""}
-	for _, character := range invalidChars {
-		name = strings.ReplaceAll(name, character, " ")
+func pointerValue(val *string) string {
+	if val == nil {
+		return ""
 	}
-	name = strings.TrimSpace(name)
-	runes := []rune(name)
-	if len(runes) > 128 {
-		name = strings.TrimSpace(string(runes[:128]))
-	}
-	return name
+	return *val
 }

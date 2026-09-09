@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS students (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     class TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
+	meeting_code TEXT NOT NULL DEFAULT '',
+	space_name TEXT NOT NULL DEFAULT '',
 	student_workspace_id TEXT,
 	teacher_workspace_id TEXT,
     cycle_start_day INTEGER NOT NULL DEFAULT 1,
@@ -68,8 +70,13 @@ CREATE TABLE IF NOT EXISTS assignments (
     assigned_at DATETIME NOT NULL,
     assignee_id INTEGER NOT NULL,
     target_page_id TEXT NOT NULL UNIQUE,
+	student_page_web_url TEXT NOT NULL DEFAULT '',
+	teacher_page_web_url TEXT NOT NULL DEFAULT '',
     items_json TEXT NOT NULL DEFAULT '[]',
-    FOREIGN KEY (assignee_id) REFERENCES students(id) ON DELETE CASCADE
+    origin_mistake_id INTEGER,
+    depth INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (assignee_id) REFERENCES students(id) ON DELETE CASCADE,
+    FOREIGN KEY (origin_mistake_id) REFERENCES mistakes(id) ON DELETE SET NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_assignments_assignee ON assignments(assignee_id, assigned_at DESC);
@@ -79,13 +86,17 @@ CREATE INDEX IF NOT EXISTS idx_assignments_status ON assignments(status);
 CREATE TABLE IF NOT EXISTS mistakes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id INTEGER NOT NULL,
-    assignment_id INTEGER NOT NULL,
+    source_assignment_id INTEGER NOT NULL,
+    parent_mistake_id INTEGER,
+    depth INTEGER NOT NULL DEFAULT 0,
     topic TEXT NOT NULL,
     error_reason TEXT NOT NULL,
-    is_resolved INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'detected',
     created_at DATETIME NOT NULL,
     FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
-    FOREIGN KEY (assignment_id) REFERENCES assignments(id) ON DELETE CASCADE
+    FOREIGN KEY (source_assignment_id) REFERENCES assignments(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_mistake_id) REFERENCES mistakes(id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_mistakes_student_resolved ON mistakes(student_id, is_resolved, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mistakes_student_status ON mistakes(student_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_mistakes_parent ON mistakes(parent_mistake_id);

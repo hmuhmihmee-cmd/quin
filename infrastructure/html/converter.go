@@ -1,4 +1,4 @@
-// File: infrastructure/html/converter.go
+// File: infrastructure/html/renderer.go
 package html
 
 import (
@@ -6,99 +6,25 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"meet-attendance-clean/domain"
 )
 
-const (
-	mathFont = "font-family:'Cambria Math','STIX Two Math','Times New Roman',serif;"
-	mathCSS  = mathFont + "font-size:1.08em;letter-spacing:0.01em;white-space:nowrap;"
-	fracCSS  = "display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;line-height:1.05;margin:0 0.14em;" + mathFont
-)
+type LessonRenderer struct{}
 
-var (
-	boldPattern           = regexp.MustCompile(`\*\*(.+?)\*\*`)
-	italicPattern         = regexp.MustCompile(`(?:^|\s)\*([^*]+?)\*`)
-	codePattern           = regexp.MustCompile("`([^`]+)`")
-	orderedPattern        = regexp.MustCompile(`^(\d+)[.)]\s+(.+)$`)
-	exerciseMarkerPattern = regexp.MustCompile(`^\[\[EXERCISE:(\d+):(START|ANSWER|FEEDBACK|END)\]\]$`)
-)
+func NewLessonRenderer() *LessonRenderer {
+	return &LessonRenderer{}
+}
 
-type Converter struct{}
-
-func New() *Converter { return &Converter{} }
-
-// MarkdownToDocument tạo HTML độc lập, tương thích Microsoft Graph/OneNote.
-// Công thức dùng HTML thuần vì OneNote thường loại JavaScript MathJax/KaTeX.
-func (c *Converter) MarkdownToDocument(title, markdownContent string) string {
+// RenderLessonHTML là hàm điều phối chính
+func (r *LessonRenderer) RenderLessonHTML(pageTitle string, lesson *domain.Lesson, audience domain.Audience) string {
 	var body strings.Builder
-	lines := strings.Split(strings.ReplaceAll(markdownContent, "\r\n", "\n"), "\n")
-	openList := ""
-	closeList := func() {
-		if openList != "" {
-			body.WriteString("</" + openList + ">")
-			openList = ""
-		}
+
+	if audience == domain.AudienceTeacher {
+		r.renderTeacherLesson(&body, lesson)
+	} else {
+		r.renderStudentLesson(&body, lesson)
 	}
-
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(strings.TrimRight(line, "\r"))
-		if marker := exerciseMarkerPattern.FindStringSubmatch(trimmed); marker != nil {
-			closeList()
-			exerciseID, markerType := marker[1], marker[2]
-			switch markerType {
-			case "START":
-				body.WriteString(`<div data-id="exercise-` + exerciseID + `-region">`)
-			case "ANSWER":
-				body.WriteString(`<table data-id="exercise-` + exerciseID + `-work" width="760" border="0" cellspacing="0" cellpadding="0" style="width:760px;border-collapse:collapse;margin:8pt 0 14pt;"><tr><td width="760" style="width:760px;padding:0;vertical-align:top;">`)
-			case "FEEDBACK":
-				body.WriteString(`</td></tr></table>`)
-			case "END":
-				body.WriteString(`</div>`)
-			}
-			continue
-		}
-		if trimmed == "" {
-			closeList()
-			continue
-		}
-
-		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "* ") {
-			if openList != "ul" {
-				closeList()
-				body.WriteString(`<ul style="margin:5pt 0 8pt 20pt;padding-left:12pt;">`)
-				openList = "ul"
-			}
-			body.WriteString(`<li style="margin:4pt 0;line-height:1.6;">` + formatInline(strings.TrimSpace(trimmed[2:])) + `</li>`)
-			continue
-		}
-		if match := orderedPattern.FindStringSubmatch(trimmed); match != nil {
-			if openList != "ol" {
-				closeList()
-				body.WriteString(`<ol style="margin:5pt 0 8pt 20pt;padding-left:12pt;">`)
-				openList = "ol"
-			}
-			body.WriteString(`<li style="margin:4pt 0;line-height:1.6;">` + formatInline(match[2]) + `</li>`)
-			continue
-		}
-		closeList()
-
-		switch {
-		case strings.HasPrefix(trimmed, "### "):
-			body.WriteString(`<h3 style="color:#334155;font-size:12pt;font-weight:700;margin:12pt 0 4pt;">` + formatInline(strings.TrimPrefix(trimmed, "### ")) + `</h3>`)
-		case strings.HasPrefix(trimmed, "## "):
-			body.WriteString(`<h2 style="color:#0f766e;font-size:14pt;font-weight:700;margin:15pt 0 5pt;">` + formatInline(strings.TrimPrefix(trimmed, "## ")) + `</h2>`)
-		case strings.HasPrefix(trimmed, "# "):
-			body.WriteString(`<h1 style="color:#1e3a8a;font-size:18pt;font-weight:700;margin:18pt 0 7pt;">` + formatInline(strings.TrimPrefix(trimmed, "# ")) + `</h1>`)
-		case strings.HasPrefix(trimmed, "> "):
-			body.WriteString(`<blockquote style="background:#f1f5f9;padding:8pt 11pt;border-left:3pt solid #0f766e;color:#475569;margin:8pt 0;line-height:1.6;">` + formatInline(strings.TrimPrefix(trimmed, "> ")) + `</blockquote>`)
-		case trimmed == "---" || trimmed == "***":
-			body.WriteString(`<hr style="border:0;border-top:1px solid #cbd5e1;margin:14pt 0;"/>`)
-		case isDisplayMath(trimmed):
-			body.WriteString(`<div style="margin:10pt 0;text-align:center;font-size:13pt;` + mathFont + `">` + renderMath(stripMathDelimiters(trimmed)) + `</div>`)
-		default:
-			body.WriteString(`<p style="font-size:11.5pt;line-height:1.65;margin:5pt 0;color:#1e293b;">` + formatInline(trimmed) + `</p>`)
-		}
-	}
-	closeList()
 
 	return fmt.Sprintf(`<!DOCTYPE html>
 <html>
@@ -107,334 +33,275 @@ func (c *Converter) MarkdownToDocument(title, markdownContent string) string {
     <title>%s</title>
     <meta name="created" content="%s" />
     <style>
-      body { font-family: Calibri, Arial, sans-serif; font-size: 11.5pt; color: #1e293b; line-height: 1.6; }
-      p { orphans: 3; widows: 3; }
-      sup, sub { font-family: 'Cambria Math', 'STIX Two Math', 'Times New Roman', serif; line-height: 0; }
-      code { font-family: Consolas, monospace; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }
+      body { font-family: Calibri, Arial, sans-serif; font-size: 14pt; color: #1e293b; line-height: 1.6; margin: 0; padding: 10pt; }
+      p { orphans: 3; widows: 3; margin: 0 0 6pt 0; }
     </style>
   </head>
-  <body><div style="max-width:760px;margin:0 auto;padding:8pt 4pt;">%s</div></body>
-</html>`, escapeHTML(title), time.Now().Format(time.RFC3339), body.String())
+  <body>
+    %s
+  </body>
+</html>`, escapeHTML(pageTitle), time.Now().Format(time.RFC3339), body.String())
 }
 
-func formatInline(text string) string {
-	var out strings.Builder
-	for len(text) > 0 {
-		start, open, close := nextMathDelimiter(text)
-		if start < 0 {
-			out.WriteString(formatText(text))
-			break
-		}
-		out.WriteString(formatText(text[:start]))
-		rest := text[start+len(open):]
-		end := strings.Index(rest, close)
-		if end < 0 {
-			out.WriteString(formatText(text[start:]))
-			break
-		}
-		out.WriteString(`<span style="` + mathCSS + `">` + renderMath(rest[:end]) + `</span>`)
-		text = rest[end+len(close):]
+// =========================================================================
+// 1. PHIẾU HỌC SINH (AudienceStudent)
+// =========================================================================
+func (r *LessonRenderer) renderStudentLesson(body *strings.Builder, lesson *domain.Lesson) {
+	// Header & Tổng quan (Huy hiệu 16pt, nội dung 14pt)
+	body.WriteString(
+		`<div style="margin-bottom:12pt;">` +
+			`<span style="background:#0f766e; color:#fff; padding:4pt 10pt; border-radius:3px; font-size:16pt; font-weight:bold;">PHIẾU BÀI TẬP HỌC SINH</span>`,
+	)
+	if strings.TrimSpace(lesson.Overview) != "" {
+		body.WriteString(renderTextBlocks(lesson.Overview, "color:#475569; font-size:14pt; font-style:italic; margin-top:8pt;"))
 	}
-	return out.String()
-}
+	body.WriteString(`</div><hr style="border:0; border-top:1.5px solid #cbd5e1; margin:12pt 0;"/>`)
 
-func formatText(text string) string {
-	text = escapeHTML(text)
-	text = codePattern.ReplaceAllString(text, `<code>$1</code>`)
-	text = boldPattern.ReplaceAllString(text, `<strong>$1</strong>`)
-	text = italicPattern.ReplaceAllString(text, ` <em>$1</em>`)
-	// Ngoài delimiter chỉ đổi số mũ/chỉ số và dấu căn, không đổi dấu / của URL.
-	return renderMathEscaped(text, false)
-}
+	// PHẦN 1: LÝ THUYẾT & VÍ DỤ TRÊN LỚP (H2: 20pt)
+	if len(lesson.Sections) > 0 {
+		body.WriteString(`<h2 style="color:#0f766e; font-size:20pt; margin:16pt 0 8pt 0;">PHẦN 1: LÝ THUYẾT & VÍ DỤ TRÊN LỚP</h2>`)
 
-func nextMathDelimiter(text string) (int, string, string) {
-	best, open, close := -1, "", ""
-	for _, delimiter := range [][2]string{{`\(`, `\)`}, {"$", "$"}} {
-		if i := strings.Index(text, delimiter[0]); i >= 0 && (best < 0 || i < best) {
-			best, open, close = i, delimiter[0], delimiter[1]
-		}
-	}
-	return best, open, close
-}
+		for secIdx, sec := range lesson.Sections {
+			sectionTitle := cleanSectionTitle(sec.SectionTitle)
+			body.WriteString(fmt.Sprintf(
+				`<div style="margin-bottom:14pt;">`+
+					`<h3 style="color:#0f172a; font-size:18pt; font-weight:700; margin:12pt 0 5pt 0;">%d. %s</h3>`,
+				secIdx+1, formatMathInline(sectionTitle),
+			))
 
-func isDisplayMath(text string) bool {
-	return strings.HasPrefix(text, "$$") && strings.HasSuffix(text, "$$") && len(text) >= 4 ||
-		strings.HasPrefix(text, `\[`) && strings.HasSuffix(text, `\]`) && len(text) >= 4
-}
-
-func stripMathDelimiters(text string) string {
-	if strings.HasPrefix(text, "$$") && strings.HasSuffix(text, "$$") {
-		return strings.TrimSpace(text[2 : len(text)-2])
-	}
-	if strings.HasPrefix(text, `\[`) && strings.HasSuffix(text, `\]`) {
-		return strings.TrimSpace(text[2 : len(text)-2])
-	}
-	return text
-}
-
-func renderMath(text string) string {
-	return renderMathEscaped(escapeHTML(strings.TrimSpace(text)), true)
-}
-
-func renderMathEscaped(text string, fractions bool) string {
-	var out strings.Builder
-	for i := 0; i < len(text); {
-		if html, next, ok := renderSpecialMath(text, i); ok {
-			out.WriteString(html)
-			i = next
-			continue
-		}
-		if command, replacement, ok := mathCommandAt(text, i); ok {
-			out.WriteString(replacement)
-			i += len(command)
-			continue
-		}
-		if fractions {
-			if html, next, ok := renderSimpleFraction(text, i); ok {
-				out.WriteString(html)
-				i = next
-				continue
+			if sec.TransitionIntro != "" {
+				body.WriteString(renderTextBlocks(sec.TransitionIntro, "color:#334155; font-size:14pt; font-style:italic;"))
 			}
-			if text[i] == '-' {
-				out.WriteString("−")
-				i++
-				continue
+			if sec.DetailedContent != "" {
+				body.WriteString(formatDetailedContent(sec.DetailedContent))
 			}
-		} else {
-			// Trong câu văn thường chỉ tự động đổi phân số thuần số (1/16,
-			// 3/4...). Quy tắc hẹp này giúp công thức đẹp mà không làm hỏng URL.
-			if html, next, ok := renderNumericFraction(text, i); ok {
-				out.WriteString(html)
-				i = next
-				continue
+
+			// Ghi nhớ quan trọng (Key Takeaway: 15pt)
+			if sec.KeyTakeaway != "" {
+				body.WriteString(fmt.Sprintf(
+					`<div style="background:#fef3c7; border:1px solid #fde68a; padding:6pt 10pt; border-radius:3px; margin:6pt 0 8pt 0; font-size:15pt;">`+
+						`<strong style="color:#92400e;">💡 Cần nhớ:</strong> <span style="color:#78350f;">%s</span>`+
+						`</div>`,
+					formatMathInline(sec.KeyTakeaway),
+				))
 			}
-		}
-		out.WriteByte(text[i])
-		i++
-	}
-	return out.String()
-}
 
-func renderSpecialMath(text string, start int) (string, int, bool) {
-	for _, command := range []string{`\dfrac`, `\tfrac`, `\frac`} {
-		if strings.HasPrefix(text[start:], command) {
-			return renderLatexFraction(text, start, len(command))
-		}
-	}
-	if strings.HasPrefix(text[start:], `\sqrt`) {
-		return renderLatexRoot(text, start)
-	}
-	if strings.HasPrefix(text[start:], "√") {
-		return renderUnicodeRoot(text, start)
-	}
-	if text[start] == '^' || text[start] == '_' {
-		return renderScript(text, start)
-	}
-	return "", start, false
-}
-
-func renderLatexFraction(text string, start, commandLength int) (string, int, bool) {
-	i := skipSpaces(text, start+commandLength)
-	numerator, next, ok := extractGroup(text, i, '{', '}')
-	if !ok {
-		return "", start, false
-	}
-	i = skipSpaces(text, next)
-	denominator, next, ok := extractGroup(text, i, '{', '}')
-	if !ok {
-		return "", start, false
-	}
-	return fractionHTML(renderMathEscaped(numerator, true), renderMathEscaped(denominator, true)), next, true
-}
-
-func renderLatexRoot(text string, start int) (string, int, bool) {
-	i := skipSpaces(text, start+len(`\sqrt`))
-	content, next, ok := extractGroup(text, i, '{', '}')
-	if !ok {
-		return "", start, false
-	}
-	return rootHTML(renderMathEscaped(content, true)), next, true
-}
-
-func renderUnicodeRoot(text string, start int) (string, int, bool) {
-	i := skipSpaces(text, start+len("√"))
-	if i >= len(text) {
-		return "√", i, true
-	}
-	var content string
-	var next int
-	var ok bool
-	switch text[i] {
-	case '(':
-		content, next, ok = extractGroup(text, i, '(', ')')
-	case '{':
-		content, next, ok = extractGroup(text, i, '{', '}')
-	default:
-		content, next = extractToken(text, i)
-		ok = content != ""
-	}
-	if !ok {
-		return "", start, false
-	}
-	return rootHTML(renderMathEscaped(content, true)), next, true
-}
-
-func renderScript(text string, start int) (string, int, bool) {
-	tag, vertical := "sup", "super"
-	if text[start] == '_' {
-		tag, vertical = "sub", "sub"
-	}
-	i := skipSpaces(text, start+1)
-	if i >= len(text) {
-		return "", start, false
-	}
-	var content string
-	var next int
-	var ok bool
-	switch text[i] {
-	case '{':
-		content, next, ok = extractGroup(text, i, '{', '}')
-	case '(':
-		content, next, ok = extractGroup(text, i, '(', ')')
-	default:
-		content, next = extractScriptToken(text, i)
-		ok = content != ""
-	}
-	if !ok {
-		return "", start, false
-	}
-	return `<` + tag + ` style="font-size:0.76em;vertical-align:` + vertical + `;` + mathFont + `">` + renderMathEscaped(content, true) + `</` + tag + `>`, next, true
-}
-
-func renderSimpleFraction(text string, start int) (string, int, bool) {
-	if start > 0 && isMathToken(text[start-1]) {
-		return "", start, false
-	}
-	numerator, slash := extractToken(text, start)
-	if numerator == "" || slash >= len(text) || text[slash] != '/' {
-		return "", start, false
-	}
-	denominator, next := extractToken(text, slash+1)
-	if denominator == "" {
-		return "", start, false
-	}
-	return fractionHTML(numerator, denominator), next, true
-}
-
-func renderNumericFraction(text string, start int) (string, int, bool) {
-	if start >= len(text) || text[start] < '0' || text[start] > '9' {
-		return "", start, false
-	}
-	if start > 0 && (isMathToken(text[start-1]) || text[start-1] == '/') {
-		return "", start, false
-	}
-
-	numerator, slash := extractNumber(text, start)
-	if numerator == "" || slash >= len(text) || text[slash] != '/' {
-		return "", start, false
-	}
-	denominator, next := extractNumber(text, slash+1)
-	if denominator == "" || next < len(text) && (isMathToken(text[next]) || text[next] == '/') {
-		return "", start, false
-	}
-
-	return fractionHTML(numerator, denominator), next, true
-}
-
-func fractionHTML(numerator, denominator string) string {
-	return `<span style="` + fracCSS + `"><span style="display:block;padding:0 0.18em 0.08em;">` + numerator +
-		`</span><span style="display:block;border-top:1.2px solid currentColor;padding:0.08em 0.18em 0;">` + denominator + `</span></span>`
-}
-
-func rootHTML(content string) string {
-	return `<span style="display:inline-flex;align-items:flex-start;vertical-align:middle;` + mathFont + `"><span style="font-size:1.15em;line-height:1;">√</span><span style="display:inline-block;border-top:1px solid currentColor;padding:0 0.12em 0 0.08em;margin-left:0.03em;">` + content + `</span></span>`
-}
-
-func mathCommandAt(text string, start int) (string, string, bool) {
-	commands := []struct{ command, replacement string }{
-		{`\Leftrightarrow`, "⇔"}, {`\Rightarrow`, "⇒"},
-		{`\mathbb{R}`, "ℝ"}, {`\mathbb{N}`, "ℕ"}, {`\mathbb{Z}`, "ℤ"}, {`\mathbb{Q}`, "ℚ"},
-		{`\setminus`, "∖"}, {`\emptyset`, "∅"}, {`\infty`, "∞"},
-		{`\times`, "×"}, {`\cdot`, "·"}, {`\div`, "÷"},
-		{`\leq`, "≤"}, {`\le`, "≤"}, {`\geq`, "≥"}, {`\ge`, "≥"}, {`\neq`, "≠"}, {`\ne`, "≠"},
-		{`\notin`, "∉"}, {`\in`, "∈"}, {`\subseteq`, "⊆"}, {`\subset`, "⊂"},
-		{`\cup`, "∪"}, {`\cap`, "∩"}, {`\pm`, "±"},
-		{`\alpha`, "α"}, {`\beta`, "β"}, {`\gamma`, "γ"}, {`\Delta`, "Δ"}, {`\delta`, "δ"},
-		{`\theta`, "θ"}, {`\lambda`, "λ"}, {`\mu`, "μ"}, {`\pi`, "π"}, {`\sigma`, "σ"}, {`\omega`, "ω"},
-		{`\left`, ""}, {`\right`, ""}, {`\,`, " "}, {`\;`, " "}, {`\ `, "∖ "},
-	}
-	for _, item := range commands {
-		if strings.HasPrefix(text[start:], item.command) {
-			return item.command, item.replacement, true
-		}
-	}
-	return "", "", false
-}
-
-func extractGroup(text string, start int, open, close byte) (string, int, bool) {
-	if start >= len(text) || text[start] != open {
-		return "", start, false
-	}
-	depth := 0
-	for i := start; i < len(text); i++ {
-		if text[i] == open {
-			depth++
-		} else if text[i] == close {
-			depth--
-			if depth == 0 {
-				return text[start+1 : i], i + 1, true
+			// Điền từ vào chỗ trống (Cloze Notes: 14pt)
+			if len(sec.StudentClozeNotes) > 0 {
+				body.WriteString(`<ul style="margin:4pt 0 10pt 16pt; padding:0; line-height:1.7;">`)
+				for _, note := range sec.StudentClozeNotes {
+					body.WriteString(fmt.Sprintf(`<li style="color:#1e293b; font-size:14pt; margin-bottom:4pt;">%s</li>`, formatMathInline(note)))
+				}
+				body.WriteString(`</ul>`)
 			}
+
+			// Ví dụ mẫu trên lớp (Tiêu đề ví dụ: 16pt, nội dung: 14pt)
+			for _, eg := range sec.TeacherExamples {
+				body.WriteString(fmt.Sprintf(
+					`<div style="margin:10pt 0 14pt 0;">`+
+						`<p style="font-size:16pt; margin:0 0 4pt 0;"><strong>Ví dụ %d:</strong> <span style="font-size:14pt;">%s</span></p>`,
+					eg.ExampleNum, formatMathInline(eg.Problem),
+				))
+
+				if eg.StudentFriendlyExplanation != "" {
+					body.WriteString(fmt.Sprintf(
+						`<p style="color:#334155; font-size:14pt; font-style:italic; margin:0 0 4pt 0;"><em>Gợi ý suy nghĩ:</em> %s</p>`,
+						formatMathInline(eg.StudentFriendlyExplanation),
+					))
+				}
+
+				body.WriteString(
+					`<p style="font-size:14pt; color:#475569; margin:4pt 0 2pt 0;">Bài làm:</p>` +
+						`<p style="color:#94a3b8; font-size:14pt; letter-spacing:1.5px; margin:0 0 2pt 0;">....................................................................................................</p>` +
+						`<p style="color:#94a3b8; font-size:14pt; letter-spacing:1.5px; margin:0 0 2pt 0;">....................................................................................................</p>`,
+				)
+				body.WriteString(`</div>`)
+			}
+
+			body.WriteString(`</div>`)
+		}
+		body.WriteString(`<hr style="border:0; border-top:1.5px solid #cbd5e1; margin:16pt 0;"/>`)
+	}
+
+	// PHẦN 2: BÀI TẬP TỰ LUYỆN (H2: 20pt)
+	if len(lesson.Exercises) > 0 {
+		body.WriteString(`<h2 style="color:#0f766e; font-size:20pt; margin:16pt 0 10pt 0;">PHẦN 2: BÀI TẬP TỰ LUYỆN</h2>`)
+
+		for idx, ex := range lesson.Exercises {
+			body.WriteString(fmt.Sprintf(`<div data-id="exercise-%d-region" style="margin: 16pt 0 24pt 0;">`, ex.ID))
+
+			diffBadge := ""
+			if ex.Difficulty != "" {
+				diffBadge = fmt.Sprintf(`<span style="font-size:14pt; background:#e2e8f0; color:#475569; padding:2pt 6pt; border-radius:3px; margin-left:6pt;">%s</span>`, escapeHTML(ex.Difficulty))
+			}
+
+			// Câu hỏi: 16pt
+			body.WriteString(fmt.Sprintf(
+				`<p style="font-size:16pt; font-weight:bold; color:#1e293b; margin:0 0 6pt 0;">`+
+					`Câu %d (%s):%s <span style="font-weight:normal;">%s</span>`+
+					`</p>`,
+				idx+1, escapeHTML(ex.Type), diffBadge, formatMathInline(ex.Question),
+			))
+
+			// Lựa chọn trắc nghiệm: 15pt
+			if len(ex.Options) > 0 {
+				body.WriteString(fmt.Sprintf(`<div style="margin:6pt 0 10pt 0;">`+
+					`<p style="margin:0 0 4pt 0; color:#475569; font-size:15pt;"><strong>Chọn duy nhất 1 đáp án:</strong></p>`+
+					`<table data-id="exercise-%d-choice" width="760" style="width:760px; border-collapse:separate; border-spacing:5pt;">`, ex.ID))
+				for optionIdx, opt := range ex.Options {
+					letter := optionLetter(optionIdx)
+					if optionIdx%2 == 0 {
+						body.WriteString(`<tr>`)
+					}
+					body.WriteString(fmt.Sprintf(`<td width="370" style="width:370px; padding:8pt 10pt; vertical-align:middle; background:#f8fafc; border:1px solid #cbd5e1;">`+
+						`<p data-id="exercise-%d-option-%s" data-tag="to-do" style="margin:0; color:#1e293b; font-size:15pt; line-height:1.45;">`+
+						`<strong>%s.</strong> %s</p></td>`, ex.ID, letter, letter, formatMathInline(optionTextWithoutLetter(opt, letter))))
+					if optionIdx%2 == 1 || optionIdx == len(ex.Options)-1 {
+						if optionIdx%2 == 0 {
+							body.WriteString(`<td width="370" style="width:370px; padding:0; border:0;">&nbsp;</td>`)
+						}
+						body.WriteString(`</tr>`)
+					}
+				}
+				body.WriteString(`</table></div>`)
+			}
+
+			// Vùng làm bài: hướng dẫn 14pt
+			body.WriteString(fmt.Sprintf(
+				`<table width="1050" style="width:1050px; border-collapse:collapse; margin:8pt 0 6pt 0;"><tr>`+
+					`<td width="760" style="width:760px; padding:0; vertical-align:top;">`+
+					`<table data-id="exercise-%d-work" width="760" style="width:760px; border-collapse:collapse;">`+
+					`<tr><td height="180" style="height:180pt; padding:10pt; border:1.5px dashed #94a3b8; background-color:#f8fafc; vertical-align:top;">`+
+					`<div data-id="exercise-%d-answer-content">`+
+					`<p style="margin:0 0 4pt 0; color:#94a3b8; font-size:14pt;"><em>✍️ Bài làm (Gõ chữ hoặc viết/chèn ảnh vào khung này):</em></p>`+
+					`<p style="margin:0; line-height:32pt;">&nbsp;</p><p style="margin:0; line-height:32pt;">&nbsp;</p><p style="margin:0; line-height:32pt;">&nbsp;</p>`+
+					`</div></td></tr></table></td>`+
+					`<td width="290" style="width:290px; padding:0 0 0 12pt; vertical-align:top;">`+
+					`<div data-id="exercise-%d-feedback" style="width:270px; min-height:1px;">&nbsp;</div>`+
+					`</td></tr></table>`,
+				ex.ID, ex.ID, ex.ID,
+			))
+
+			body.WriteString(`</div>`)
 		}
 	}
-	return "", start, false
 }
 
-func extractToken(text string, start int) (string, int) {
-	i := start
-	for i < len(text) && isMathToken(text[i]) {
-		i++
+// =========================================================================
+// 2. PHIẾU GIÁO VIÊN (AudienceTeacher)
+// =========================================================================
+func (r *LessonRenderer) renderTeacherLesson(body *strings.Builder, lesson *domain.Lesson) {
+	// Header & Tổng quan (Huy hiệu 16pt, nội dung 14pt)
+	body.WriteString(
+		`<div style="margin-bottom:12pt;">` +
+			`<span style="background:#1e3a8a; color:#fff; padding:4pt 10pt; border-radius:3px; font-size:16pt; font-weight:bold;">GIÁO ÁN GIẢNG DẠY & ĐÁP ÁN (GIÁO VIÊN)</span>`,
+	)
+	if strings.TrimSpace(lesson.Overview) != "" {
+		body.WriteString(renderTextBlocks(lesson.Overview, "color:#475569; font-size:14pt; font-style:italic; margin-top:8pt;"))
 	}
-	return text[start:i], i
-}
+	body.WriteString(`</div><hr style="border:0; border-top:1.5px solid #cbd5e1; margin:12pt 0;"/>`)
 
-func extractNumber(text string, start int) (string, int) {
-	i := start
-	dotSeen := false
-	for i < len(text) {
-		if text[i] >= '0' && text[i] <= '9' {
-			i++
-			continue
+	// PHẦN 1: HƯỚNG DẪN GIẢNG DẠY (H2: 20pt)
+	if len(lesson.Sections) > 0 {
+		body.WriteString(`<h2 style="color:#1e3a8a; font-size:20pt; margin:16pt 0 8pt 0;">I. KIẾN THỨC TRỌNG TÂM & HƯỚNG DẪN GIẢNG DẠY</h2>`)
+
+		for secIdx, sec := range lesson.Sections {
+			sectionTitle := cleanSectionTitle(sec.SectionTitle)
+			body.WriteString(fmt.Sprintf(
+				`<div style="background:#f8fafc; border-left:3.5px solid #cbd5e1; padding:10pt 12pt; margin-bottom:14pt; border-radius:0 4px 4px 0;">`+
+					`<h3 style="color:#0f172a; font-size:18pt; font-weight:700; margin:0 0 5pt 0;">%d. %s</h3>`,
+				secIdx+1, formatMathInline(sectionTitle),
+			))
+
+			if sec.TransitionIntro != "" {
+				body.WriteString(renderTextBlocks(sec.TransitionIntro, "color:#334155; font-size:14pt; font-style:italic;"))
+			}
+			if sec.DetailedContent != "" {
+				body.WriteString(formatDetailedContent(sec.DetailedContent))
+			}
+
+			// Ghi nhớ (15pt)
+			if sec.KeyTakeaway != "" {
+				body.WriteString(fmt.Sprintf(
+					`<div style="background:#fef3c7; border:1px solid #fde68a; padding:6pt 10pt; border-radius:3px; margin:6pt 0 8pt 0; font-size:15pt;">`+
+						`<strong style="color:#92400e;">💡 Cần nhớ:</strong> <span style="color:#78350f;">%s</span>`+
+						`</div>`,
+					formatMathInline(sec.KeyTakeaway),
+				))
+			}
+
+			// Ví dụ mẫu (Tiêu đề nhóm: 16pt, tiêu đề ví dụ: 16pt, lời giải: 14pt)
+			if len(sec.TeacherExamples) > 0 {
+				body.WriteString(`<div style="margin-top:10pt;"><strong style="color:#0f172a; font-size:16pt;">Ví dụ mẫu & Hướng dẫn giải:</strong>`)
+				for _, eg := range sec.TeacherExamples {
+					body.WriteString(fmt.Sprintf(
+						`<div style="background:#ffffff; border:1px solid #e2e8f0; padding:8pt 10pt; margin:6pt 0; border-radius:4px;">`+
+							`<p style="font-weight:bold; font-size:16pt; color:#1e293b; margin:0 0 4pt 0;">Ví dụ %d: <span style="font-weight:normal; font-size:14pt;">%s</span></p>`+
+							`<div style="background:#f0fdf4; border-left:3px solid #16a34a; padding:6pt 8pt; margin:6pt 0 4pt 0;">`+
+							`<strong style="color:#15803d; font-size:15pt;">Lời giải chi tiết:</strong><div style="color:#166534; font-size:14pt; margin-top:2pt;">%s</div>`+
+							`</div>`,
+						eg.ExampleNum, formatMathInline(eg.Problem), renderTextBlocks(eg.TeacherSolution, "color:#166534; font-size:14pt;"),
+					))
+
+					if eg.CommonMistake != "" {
+						body.WriteString(fmt.Sprintf(
+							`<p style="color:#dc2626; font-size:14pt; margin:4pt 0 0 0;"><strong>⚠️ Lỗi học sinh hay gặp:</strong> %s</p>`,
+							formatMathInline(eg.CommonMistake),
+						))
+					}
+					body.WriteString(`</div>`)
+				}
+				body.WriteString(`</div>`)
+			}
+
+			body.WriteString(`</div>`)
 		}
-		if text[i] == '.' && !dotSeen {
-			dotSeen = true
-			i++
-			continue
+		body.WriteString(`<hr style="border:0; border-top:1.5px solid #cbd5e1; margin:16pt 0;"/>`)
+	}
+
+	// PHẦN 2: BÀI TẬP & ĐÁP ÁN (H2: 20pt)
+	if len(lesson.Exercises) > 0 {
+		body.WriteString(`<h2 style="color:#1e3a8a; font-size:20pt; margin:16pt 0 10pt 0;">II. HỆ THỐNG BÀI TẬP & ĐÁP ÁN GIẢNG DẠY</h2>`)
+
+		for idx, ex := range lesson.Exercises {
+			body.WriteString(fmt.Sprintf(`<div data-id="exercise-%d-region" style="margin: 14pt 0 20pt 0;">`, ex.ID))
+
+			diffBadge := ""
+			if ex.Difficulty != "" {
+				diffBadge = fmt.Sprintf(`<span style="font-size:14pt; background:#e2e8f0; color:#475569; padding:2pt 6pt; border-radius:3px; margin-left:6pt;">%s</span>`, escapeHTML(ex.Difficulty))
+			}
+
+			// Câu hỏi: 16pt
+			body.WriteString(fmt.Sprintf(
+				`<p style="font-size:16pt; font-weight:bold; color:#1e293b; margin:0 0 6pt 0;">`+
+					`Câu %d (%s):%s <span style="font-weight:normal;">%s</span>`+
+					`</p>`,
+				idx+1, escapeHTML(ex.Type), diffBadge, formatMathInline(ex.Question),
+			))
+
+			// Lựa chọn: 15pt
+			if len(ex.Options) > 0 {
+				body.WriteString(`<div style="margin:4pt 0 8pt 12pt; display:flex; flex-direction:column; gap:4pt;">`)
+				for _, opt := range ex.Options {
+					body.WriteString(fmt.Sprintf(`<div style="color:#334155; font-size:15pt;">%s</div>`, formatMathInline(opt)))
+				}
+				body.WriteString(`</div>`)
+			}
+
+			// Đáp án: Nhãn 15pt, lời giải 14pt
+			body.WriteString(fmt.Sprintf(
+				`<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-left:4px solid #16a34a; padding:8pt 12pt; border-radius:4px; margin:8pt 0 12pt 0;">`+
+					`<p style="margin:0 0 4pt 0; color:#15803d; font-weight:bold; font-size:15pt;">`+
+					`✅ Đáp án đúng: <span style="background:#16a34a; color:#ffffff; padding:2pt 8pt; border-radius:3px; font-size:15pt;">%s</span>`+
+					`</p>`+
+					`<div style="margin:0; color:#166534; font-size:14pt; line-height:1.5;"><strong>Lời giải chi tiết:</strong>%s</div>`+
+					`</div>`,
+				formatMathInline(ex.Answer), renderTextBlocks(ex.Explanation, "color:#166534; font-size:14pt; line-height:1.5;"),
+			))
+
+			body.WriteString(`</div>`)
 		}
-		break
 	}
-	return text[start:i], i
-}
-
-func extractScriptToken(text string, start int) (string, int) {
-	i := start
-	if i < len(text) && (text[i] == '+' || text[i] == '-') {
-		i++
-	}
-	for i < len(text) && (isMathToken(text[i]) || text[i] == '/') {
-		i++
-	}
-	return text[start:i], i
-}
-
-func isMathToken(char byte) bool {
-	return char >= '0' && char <= '9' || char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char == '.'
-}
-
-func skipSpaces(text string, start int) int {
-	for start < len(text) && text[start] == ' ' {
-		start++
-	}
-	return start
 }
 
 func escapeHTML(text string) string {
@@ -443,4 +310,183 @@ func escapeHTML(text string) string {
 	text = strings.ReplaceAll(text, ">", "&gt;")
 	text = strings.ReplaceAll(text, `"`, "&quot;")
 	return text
+}
+
+var (
+	fractionRE           = regexp.MustCompile(`(-?\d+|\([^()\r\n]+\))\s*/\s*(\d+|\([^()\r\n]+\))`)
+	superscriptRE        = regexp.MustCompile(`\^(\{([^{}\r\n]+)\}|[A-Za-z0-9()+\-]+)`)
+	subscriptRE          = regexp.MustCompile(`_([A-Za-z0-9]+)`)
+	inlineStepRE         = regexp.MustCompile(`(?i)[ \t]+[+\-−][ \t]+(bước[ \t]*\d+|các bước|nếu |trường hợp|kết luận|lập bảng|biểu diễn|vẽ |tính |thay )`)
+	listItemRE           = regexp.MustCompile(`^(?:[•*+\-−][ \t]+|bước[ \t]*\d+[.:][ \t]*)`)
+	sectionTitlePrefixRE = regexp.MustCompile(`(?i)^\s*(?:(?:mục|phần|bài)\s+\d+\s*[.:\-–)]*\s*|\d+\s*[.:\-–)]\s*|[ivxlcdm]+\s*[.:\-–)]\s*)`)
+)
+
+func formatMathInline(text string) string {
+	value := escapeHTML(strings.TrimSpace(text))
+	if value == "" {
+		return ""
+	}
+	value = fractionRE.ReplaceAllStringFunc(value, func(match string) string {
+		parts := fractionRE.FindStringSubmatch(match)
+		return "<sup>" + strings.TrimSpace(parts[1]) + "</sup>⁄<sub>" + strings.TrimSpace(parts[2]) + "</sub>"
+	})
+	value = superscriptRE.ReplaceAllStringFunc(value, func(match string) string {
+		parts := superscriptRE.FindStringSubmatch(match)
+		exponent := parts[1]
+		if parts[2] != "" {
+			exponent = parts[2]
+		}
+		return "<sup>" + exponent + "</sup>"
+	})
+	value = subscriptRE.ReplaceAllString(value, `<sub>$1</sub>`)
+	value = strings.ReplaceAll(value, " => ", " ⇒ ")
+	value = strings.ReplaceAll(value, " -> ", " → ")
+	return value
+}
+
+func renderTextBlocks(text, style string) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	text = inlineStepRE.ReplaceAllString(text, "\n• $1")
+
+	lines := strings.Split(text, "\n")
+	var out strings.Builder
+	inList := false
+	closeList := func() {
+		if inList {
+			out.WriteString(`</ul>`)
+			inList = false
+		}
+	}
+	for _, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			closeList()
+			continue
+		}
+		if listItemRE.MatchString(line) {
+			if !inList {
+				out.WriteString(`<ul style="margin:4pt 0 8pt 18pt; padding:0;">`)
+				inList = true
+			}
+			line = listItemRE.ReplaceAllString(line, "")
+			out.WriteString(fmt.Sprintf(`<li style="%s margin:0 0 3pt 0; font-size:14pt;">%s</li>`, style, formatMathInline(line)))
+			continue
+		}
+		closeList()
+		out.WriteString(fmt.Sprintf(`<p style="%s font-size:14pt;">%s</p>`, style, formatMathInline(line)))
+	}
+	closeList()
+	return out.String()
+}
+
+func cleanSectionTitle(title string) string {
+	cleaned := strings.TrimSpace(title)
+	for range 3 {
+		next := strings.TrimSpace(sectionTitlePrefixRE.ReplaceAllString(cleaned, ""))
+		if next == cleaned {
+			break
+		}
+		cleaned = next
+	}
+	return cleaned
+}
+
+func formatDetailedContent(rawText string) string {
+	text := strings.ReplaceAll(rawText, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	text = inlineStepRE.ReplaceAllString(text, "\n- $1")
+
+	var out strings.Builder
+	out.WriteString(`<div style="margin:6pt 0 10pt 0; line-height:1.65; color:#1e293b; font-size:14pt;">`)
+	inRootList := false
+	inChildList := false
+	inRootItem := false
+	closeChildList := func() {
+		if inChildList {
+			out.WriteString(`</ul>`)
+			inChildList = false
+		}
+	}
+	closeRootItem := func() {
+		if inRootItem {
+			closeChildList()
+			out.WriteString(`</li>`)
+			inRootItem = false
+		}
+	}
+	closeRootList := func() {
+		if inRootList {
+			closeRootItem()
+			out.WriteString(`</ul>`)
+			inRootList = false
+		}
+	}
+	openRootList := func() {
+		if !inRootList {
+			out.WriteString(`<ul style="margin:6pt 0 8pt 20pt; padding:0; list-style-type:disc;">`)
+			inRootList = true
+		}
+	}
+	for _, rawLine := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(rawLine)
+		if trimmed == "" {
+			closeRootList()
+			continue
+		}
+
+		if strings.HasPrefix(trimmed, "* ") {
+			content := strings.TrimSpace(strings.TrimPrefix(trimmed, "* "))
+			openRootList()
+			if !inRootItem {
+				out.WriteString(`<li style="margin:0 0 3pt 0; color:#0f172a; font-size:14pt;">`)
+				inRootItem = true
+			}
+			if !inChildList {
+				out.WriteString(`<ul style="margin:3pt 0 3pt 18pt; padding:0; list-style-type:circle;">`)
+				inChildList = true
+			}
+			out.WriteString(fmt.Sprintf(
+				`<li style="margin:0 0 3pt 0; color:#1e293b; font-size:14pt;">%s</li>`,
+				formatMathInline(content),
+			))
+			continue
+		}
+
+		if strings.HasPrefix(trimmed, "- ") || strings.HasPrefix(trimmed, "• ") || strings.HasPrefix(trimmed, "+ ") {
+			content := strings.TrimSpace(trimmed[2:])
+			openRootList()
+			closeRootItem()
+			out.WriteString(fmt.Sprintf(
+				`<li style="margin:0 0 5pt 0; color:#1e293b; font-weight:normal; font-size:14pt;">%s`,
+				formatMathInline(content),
+			))
+			inRootItem = true
+			continue
+		}
+
+		closeRootList()
+		out.WriteString(fmt.Sprintf(`<p style="margin:4pt 0; font-size:14pt;">%s</p>`, formatMathInline(trimmed)))
+	}
+	closeRootList()
+	out.WriteString(`</div>`)
+	return out.String()
+}
+
+func optionLetter(index int) string {
+	if index >= 0 && index < 26 {
+		return string(rune('A' + index))
+	}
+	return fmt.Sprintf("%d", index+1)
+}
+
+func optionTextWithoutLetter(option, letter string) string {
+	trimmed := strings.TrimSpace(option)
+	prefixes := []string{letter + ".", letter + ")", letter + ":"}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(strings.ToUpper(trimmed), prefix) {
+			return strings.TrimSpace(trimmed[len(prefix):])
+		}
+	}
+	return trimmed
 }

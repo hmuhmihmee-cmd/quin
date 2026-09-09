@@ -54,28 +54,33 @@ func (q *Queries) CreateLessonDraft(ctx context.Context, arg CreateLessonDraftPa
 
 const createMistake = `-- name: CreateMistake :one
 INSERT INTO mistakes (
-    student_id, assignment_id, topic, error_reason, is_resolved, created_at
-) VALUES (?, ?, ?, ?, ?, ?)
+    student_id, source_assignment_id, parent_mistake_id, depth,
+    topic, error_reason, status, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
 type CreateMistakeParams struct {
-	StudentID    int64     `db:"student_id" json:"student_id"`
-	AssignmentID int64     `db:"assignment_id" json:"assignment_id"`
-	Topic        string    `db:"topic" json:"topic"`
-	ErrorReason  string    `db:"error_reason" json:"error_reason"`
-	IsResolved   int64     `db:"is_resolved" json:"is_resolved"`
-	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	StudentID          int64         `db:"student_id" json:"student_id"`
+	SourceAssignmentID int64         `db:"source_assignment_id" json:"source_assignment_id"`
+	ParentMistakeID    sql.NullInt64 `db:"parent_mistake_id" json:"parent_mistake_id"`
+	Depth              int64         `db:"depth" json:"depth"`
+	Topic              string        `db:"topic" json:"topic"`
+	ErrorReason        string        `db:"error_reason" json:"error_reason"`
+	Status             string        `db:"status" json:"status"`
+	CreatedAt          time.Time     `db:"created_at" json:"created_at"`
 }
 
-// NEW INFRASTRUCTURE: persist one detected mistake through sqlc.
+// Persist one detected mistake, including its remediation ancestry.
 func (q *Queries) CreateMistake(ctx context.Context, arg CreateMistakeParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, createMistake,
 		arg.StudentID,
-		arg.AssignmentID,
+		arg.SourceAssignmentID,
+		arg.ParentMistakeID,
+		arg.Depth,
 		arg.Topic,
 		arg.ErrorReason,
-		arg.IsResolved,
+		arg.Status,
 		arg.CreatedAt,
 	)
 	var id int64
@@ -84,18 +89,26 @@ func (q *Queries) CreateMistake(ctx context.Context, arg CreateMistakeParams) (i
 }
 
 const createStudent = `-- name: CreateStudent :exec
-INSERT INTO students (class, name, cycle_start_day)
-VALUES (?, ?, ?)
+INSERT INTO students (class, name, meeting_code, space_name, cycle_start_day)
+VALUES (?, ?, ?, ?, ?)
 `
 
 type CreateStudentParams struct {
 	Class         string `db:"class" json:"class"`
 	Name          string `db:"name" json:"name"`
+	MeetingCode   string `db:"meeting_code" json:"meeting_code"`
+	SpaceName     string `db:"space_name" json:"space_name"`
 	CycleStartDay int64  `db:"cycle_start_day" json:"cycle_start_day"`
 }
 
 func (q *Queries) CreateStudent(ctx context.Context, arg CreateStudentParams) error {
-	_, err := q.db.ExecContext(ctx, createStudent, arg.Class, arg.Name, arg.CycleStartDay)
+	_, err := q.db.ExecContext(ctx, createStudent,
+		arg.Class,
+		arg.Name,
+		arg.MeetingCode,
+		arg.SpaceName,
+		arg.CycleStartDay,
+	)
 	return err
 }
 
@@ -117,7 +130,11 @@ SELECT
     a.status,
     a.assigned_at,
     a.target_page_id,
+	a.student_page_web_url,
+	a.teacher_page_web_url,
     a.items_json,
+    a.origin_mistake_id,
+    a.depth,
     s.id AS student_id,
     s.class AS student_class,
     s.name AS student_name,
@@ -136,7 +153,11 @@ type GetAssignmentByPageIDRow struct {
 	Status               string         `db:"status" json:"status"`
 	AssignedAt           time.Time      `db:"assigned_at" json:"assigned_at"`
 	TargetPageID         string         `db:"target_page_id" json:"target_page_id"`
+	StudentPageWebUrl    string         `db:"student_page_web_url" json:"student_page_web_url"`
+	TeacherPageWebUrl    string         `db:"teacher_page_web_url" json:"teacher_page_web_url"`
 	ItemsJson            string         `db:"items_json" json:"items_json"`
+	OriginMistakeID      sql.NullInt64  `db:"origin_mistake_id" json:"origin_mistake_id"`
+	Depth                int64          `db:"depth" json:"depth"`
 	StudentID            int64          `db:"student_id" json:"student_id"`
 	StudentClass         string         `db:"student_class" json:"student_class"`
 	StudentName          string         `db:"student_name" json:"student_name"`
@@ -156,7 +177,11 @@ func (q *Queries) GetAssignmentByPageID(ctx context.Context, targetPageID string
 		&i.Status,
 		&i.AssignedAt,
 		&i.TargetPageID,
+		&i.StudentPageWebUrl,
+		&i.TeacherPageWebUrl,
 		&i.ItemsJson,
+		&i.OriginMistakeID,
+		&i.Depth,
 		&i.StudentID,
 		&i.StudentClass,
 		&i.StudentName,
@@ -205,14 +230,50 @@ func (q *Queries) GetLessonDraft(ctx context.Context, id int64) (GetLessonDraftR
 	return i, err
 }
 
-const getMistakeContext = `-- name: GetMistakeContext :one
+const getMistakeByID = `-- name: GetMistakeByID :one
+SELECT id, source_assignment_id, parent_mistake_id, depth, topic, error_reason, status, created_at
+FROM mistakes
+WHERE id = ?
+`
+
+type GetMistakeByIDRow struct {
+	ID                 int64         `db:"id" json:"id"`
+	SourceAssignmentID int64         `db:"source_assignment_id" json:"source_assignment_id"`
+	ParentMistakeID    sql.NullInt64 `db:"parent_mistake_id" json:"parent_mistake_id"`
+	Depth              int64         `db:"depth" json:"depth"`
+	Topic              string        `db:"topic" json:"topic"`
+	ErrorReason        string        `db:"error_reason" json:"error_reason"`
+	Status             string        `db:"status" json:"status"`
+	CreatedAt          time.Time     `db:"created_at" json:"created_at"`
+}
+
+// Load one mistake for status transitions.
+func (q *Queries) GetMistakeByID(ctx context.Context, id int64) (GetMistakeByIDRow, error) {
+	row := q.db.QueryRowContext(ctx, getMistakeByID, id)
+	var i GetMistakeByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.SourceAssignmentID,
+		&i.ParentMistakeID,
+		&i.Depth,
+		&i.Topic,
+		&i.ErrorReason,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getMistakeWithStudent = `-- name: GetMistakeWithStudent :one
 SELECT
     m.id,
     m.student_id,
-    m.assignment_id,
+    m.source_assignment_id,
+    m.parent_mistake_id,
+    m.depth,
     m.topic,
     m.error_reason,
-    m.is_resolved,
+    m.status,
     m.created_at,
     s.class AS student_class,
     s.name AS student_name,
@@ -224,13 +285,15 @@ JOIN students s ON s.id = m.student_id
 WHERE m.id = ?
 `
 
-type GetMistakeContextRow struct {
+type GetMistakeWithStudentRow struct {
 	ID                   int64          `db:"id" json:"id"`
 	StudentID            int64          `db:"student_id" json:"student_id"`
-	AssignmentID         int64          `db:"assignment_id" json:"assignment_id"`
+	SourceAssignmentID   int64          `db:"source_assignment_id" json:"source_assignment_id"`
+	ParentMistakeID      sql.NullInt64  `db:"parent_mistake_id" json:"parent_mistake_id"`
+	Depth                int64          `db:"depth" json:"depth"`
 	Topic                string         `db:"topic" json:"topic"`
 	ErrorReason          string         `db:"error_reason" json:"error_reason"`
-	IsResolved           int64          `db:"is_resolved" json:"is_resolved"`
+	Status               string         `db:"status" json:"status"`
 	CreatedAt            time.Time      `db:"created_at" json:"created_at"`
 	StudentClass         string         `db:"student_class" json:"student_class"`
 	StudentName          string         `db:"student_name" json:"student_name"`
@@ -239,17 +302,19 @@ type GetMistakeContextRow struct {
 	TeacherWorkspaceID   sql.NullString `db:"teacher_workspace_id" json:"teacher_workspace_id"`
 }
 
-// NEW UI INFRASTRUCTURE: load all data needed to create remediation work.
-func (q *Queries) GetMistakeContext(ctx context.Context, id int64) (GetMistakeContextRow, error) {
-	row := q.db.QueryRowContext(ctx, getMistakeContext, id)
-	var i GetMistakeContextRow
+// Load the selected mistake and the student who owns it.
+func (q *Queries) GetMistakeWithStudent(ctx context.Context, id int64) (GetMistakeWithStudentRow, error) {
+	row := q.db.QueryRowContext(ctx, getMistakeWithStudent, id)
+	var i GetMistakeWithStudentRow
 	err := row.Scan(
 		&i.ID,
 		&i.StudentID,
-		&i.AssignmentID,
+		&i.SourceAssignmentID,
+		&i.ParentMistakeID,
+		&i.Depth,
 		&i.Topic,
 		&i.ErrorReason,
-		&i.IsResolved,
+		&i.Status,
 		&i.CreatedAt,
 		&i.StudentClass,
 		&i.StudentName,
@@ -272,7 +337,7 @@ func (q *Queries) GetSetting(ctx context.Context, key string) (string, error) {
 }
 
 const getStudent = `-- name: GetStudent :one
-SELECT id, class, name, cycle_start_day, student_workspace_id, teacher_workspace_id
+SELECT id, class, name, meeting_code, space_name, cycle_start_day, student_workspace_id, teacher_workspace_id
 FROM students
 WHERE id = ?
 `
@@ -281,6 +346,8 @@ type GetStudentRow struct {
 	ID                 int64          `db:"id" json:"id"`
 	Class              string         `db:"class" json:"class"`
 	Name               string         `db:"name" json:"name"`
+	MeetingCode        string         `db:"meeting_code" json:"meeting_code"`
+	SpaceName          string         `db:"space_name" json:"space_name"`
 	CycleStartDay      int64          `db:"cycle_start_day" json:"cycle_start_day"`
 	StudentWorkspaceID sql.NullString `db:"student_workspace_id" json:"student_workspace_id"`
 	TeacherWorkspaceID sql.NullString `db:"teacher_workspace_id" json:"teacher_workspace_id"`
@@ -293,6 +360,8 @@ func (q *Queries) GetStudent(ctx context.Context, id int64) (GetStudentRow, erro
 		&i.ID,
 		&i.Class,
 		&i.Name,
+		&i.MeetingCode,
+		&i.SpaceName,
 		&i.CycleStartDay,
 		&i.StudentWorkspaceID,
 		&i.TeacherWorkspaceID,
@@ -307,6 +376,8 @@ SELECT
     a.status,
     a.assigned_at,
     a.target_page_id,
+	a.student_page_web_url,
+	a.teacher_page_web_url,
     a.items_json,
     s.id AS student_id,
     s.name AS student_name
@@ -316,14 +387,16 @@ ORDER BY a.assigned_at DESC
 `
 
 type ListAssignmentsForGradingRow struct {
-	ID           int64     `db:"id" json:"id"`
-	Title        string    `db:"title" json:"title"`
-	Status       string    `db:"status" json:"status"`
-	AssignedAt   time.Time `db:"assigned_at" json:"assigned_at"`
-	TargetPageID string    `db:"target_page_id" json:"target_page_id"`
-	ItemsJson    string    `db:"items_json" json:"items_json"`
-	StudentID    int64     `db:"student_id" json:"student_id"`
-	StudentName  string    `db:"student_name" json:"student_name"`
+	ID                int64     `db:"id" json:"id"`
+	Title             string    `db:"title" json:"title"`
+	Status            string    `db:"status" json:"status"`
+	AssignedAt        time.Time `db:"assigned_at" json:"assigned_at"`
+	TargetPageID      string    `db:"target_page_id" json:"target_page_id"`
+	StudentPageWebUrl string    `db:"student_page_web_url" json:"student_page_web_url"`
+	TeacherPageWebUrl string    `db:"teacher_page_web_url" json:"teacher_page_web_url"`
+	ItemsJson         string    `db:"items_json" json:"items_json"`
+	StudentID         int64     `db:"student_id" json:"student_id"`
+	StudentName       string    `db:"student_name" json:"student_name"`
 }
 
 // NEW UI INFRASTRUCTURE: aggregate assignments for the grading screen.
@@ -342,6 +415,8 @@ func (q *Queries) ListAssignmentsForGrading(ctx context.Context) ([]ListAssignme
 			&i.Status,
 			&i.AssignedAt,
 			&i.TargetPageID,
+			&i.StudentPageWebUrl,
+			&i.TeacherPageWebUrl,
 			&i.ItemsJson,
 			&i.StudentID,
 			&i.StudentName,
@@ -502,14 +577,77 @@ func (q *Queries) ListMeetingParticipants(ctx context.Context, meetingID int64) 
 	return items, nil
 }
 
+const listMistakeAncestry = `-- name: ListMistakeAncestry :many
+WITH RECURSIVE ancestry(id, source_assignment_id, parent_mistake_id, depth, topic, error_reason, status, created_at, distance) AS (
+    SELECT m.id, m.source_assignment_id, m.parent_mistake_id, m.depth, m.topic, m.error_reason, m.status, m.created_at, 0
+    FROM mistakes m
+    WHERE m.id = ?
+    UNION ALL
+    SELECT parent.id, parent.source_assignment_id, parent.parent_mistake_id, parent.depth,
+           parent.topic, parent.error_reason, parent.status, parent.created_at, ancestry.distance + 1
+    FROM mistakes parent
+    JOIN ancestry ON ancestry.parent_mistake_id = parent.id
+)
+SELECT id, source_assignment_id, parent_mistake_id, depth, topic, error_reason, status, created_at
+FROM ancestry
+WHERE distance > 0
+ORDER BY distance DESC
+`
+
+type ListMistakeAncestryRow struct {
+	ID                 int64         `db:"id" json:"id"`
+	SourceAssignmentID int64         `db:"source_assignment_id" json:"source_assignment_id"`
+	ParentMistakeID    sql.NullInt64 `db:"parent_mistake_id" json:"parent_mistake_id"`
+	Depth              int64         `db:"depth" json:"depth"`
+	Topic              string        `db:"topic" json:"topic"`
+	ErrorReason        string        `db:"error_reason" json:"error_reason"`
+	Status             string        `db:"status" json:"status"`
+	CreatedAt          time.Time     `db:"created_at" json:"created_at"`
+}
+
+// Load ancestors from root to the direct parent of the requested mistake.
+func (q *Queries) ListMistakeAncestry(ctx context.Context, id int64) ([]ListMistakeAncestryRow, error) {
+	rows, err := q.db.QueryContext(ctx, listMistakeAncestry, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMistakeAncestryRow
+	for rows.Next() {
+		var i ListMistakeAncestryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourceAssignmentID,
+			&i.ParentMistakeID,
+			&i.Depth,
+			&i.Topic,
+			&i.ErrorReason,
+			&i.Status,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMistakesWithStudents = `-- name: ListMistakesWithStudents :many
 SELECT
     m.id,
     m.student_id,
-    m.assignment_id,
+    m.source_assignment_id,
+    m.parent_mistake_id,
+    m.depth,
     m.topic,
     m.error_reason,
-    m.is_resolved,
+    m.status,
     m.created_at,
     s.name AS student_name
 FROM mistakes m
@@ -518,17 +656,19 @@ ORDER BY s.name ASC, m.created_at DESC
 `
 
 type ListMistakesWithStudentsRow struct {
-	ID           int64     `db:"id" json:"id"`
-	StudentID    int64     `db:"student_id" json:"student_id"`
-	AssignmentID int64     `db:"assignment_id" json:"assignment_id"`
-	Topic        string    `db:"topic" json:"topic"`
-	ErrorReason  string    `db:"error_reason" json:"error_reason"`
-	IsResolved   int64     `db:"is_resolved" json:"is_resolved"`
-	CreatedAt    time.Time `db:"created_at" json:"created_at"`
-	StudentName  string    `db:"student_name" json:"student_name"`
+	ID                 int64         `db:"id" json:"id"`
+	StudentID          int64         `db:"student_id" json:"student_id"`
+	SourceAssignmentID int64         `db:"source_assignment_id" json:"source_assignment_id"`
+	ParentMistakeID    sql.NullInt64 `db:"parent_mistake_id" json:"parent_mistake_id"`
+	Depth              int64         `db:"depth" json:"depth"`
+	Topic              string        `db:"topic" json:"topic"`
+	ErrorReason        string        `db:"error_reason" json:"error_reason"`
+	Status             string        `db:"status" json:"status"`
+	CreatedAt          time.Time     `db:"created_at" json:"created_at"`
+	StudentName        string        `db:"student_name" json:"student_name"`
 }
 
-// NEW UI INFRASTRUCTURE: list mistakes together with their student.
+// List mistakes together with their student.
 func (q *Queries) ListMistakesWithStudents(ctx context.Context) ([]ListMistakesWithStudentsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listMistakesWithStudents)
 	if err != nil {
@@ -541,10 +681,12 @@ func (q *Queries) ListMistakesWithStudents(ctx context.Context) ([]ListMistakesW
 		if err := rows.Scan(
 			&i.ID,
 			&i.StudentID,
-			&i.AssignmentID,
+			&i.SourceAssignmentID,
+			&i.ParentMistakeID,
+			&i.Depth,
 			&i.Topic,
 			&i.ErrorReason,
-			&i.IsResolved,
+			&i.Status,
 			&i.CreatedAt,
 			&i.StudentName,
 		); err != nil {
@@ -562,7 +704,7 @@ func (q *Queries) ListMistakesWithStudents(ctx context.Context) ([]ListMistakesW
 }
 
 const listStudentChoices = `-- name: ListStudentChoices :many
-SELECT id, name, class, student_workspace_id, teacher_workspace_id
+SELECT id, name, class, meeting_code, space_name, student_workspace_id, teacher_workspace_id
 FROM students
 ORDER BY name ASC
 `
@@ -571,6 +713,8 @@ type ListStudentChoicesRow struct {
 	ID                 int64          `db:"id" json:"id"`
 	Name               string         `db:"name" json:"name"`
 	Class              string         `db:"class" json:"class"`
+	MeetingCode        string         `db:"meeting_code" json:"meeting_code"`
+	SpaceName          string         `db:"space_name" json:"space_name"`
 	StudentWorkspaceID sql.NullString `db:"student_workspace_id" json:"student_workspace_id"`
 	TeacherWorkspaceID sql.NullString `db:"teacher_workspace_id" json:"teacher_workspace_id"`
 }
@@ -589,6 +733,8 @@ func (q *Queries) ListStudentChoices(ctx context.Context) ([]ListStudentChoicesR
 			&i.ID,
 			&i.Name,
 			&i.Class,
+			&i.MeetingCode,
+			&i.SpaceName,
 			&i.StudentWorkspaceID,
 			&i.TeacherWorkspaceID,
 		); err != nil {
@@ -610,6 +756,8 @@ SELECT
     s.id,
     s.class,
     s.name,
+	s.meeting_code,
+	s.space_name,
     s.cycle_start_day,
     COUNT(m.id) AS total_sessions,
     CAST(COALESCE(SUM(m.duration_minutes), 0) AS INTEGER) AS total_duration_minutes
@@ -634,6 +782,8 @@ type ListStudentsWithStatsRow struct {
 	ID                   int64  `db:"id" json:"id"`
 	Class                string `db:"class" json:"class"`
 	Name                 string `db:"name" json:"name"`
+	MeetingCode          string `db:"meeting_code" json:"meeting_code"`
+	SpaceName            string `db:"space_name" json:"space_name"`
 	CycleStartDay        int64  `db:"cycle_start_day" json:"cycle_start_day"`
 	TotalSessions        int64  `db:"total_sessions" json:"total_sessions"`
 	TotalDurationMinutes int64  `db:"total_duration_minutes" json:"total_duration_minutes"`
@@ -657,6 +807,8 @@ func (q *Queries) ListStudentsWithStats(ctx context.Context, arg ListStudentsWit
 			&i.ID,
 			&i.Class,
 			&i.Name,
+			&i.MeetingCode,
+			&i.SpaceName,
 			&i.CycleStartDay,
 			&i.TotalSessions,
 			&i.TotalDurationMinutes,
@@ -674,43 +826,37 @@ func (q *Queries) ListStudentsWithStats(ctx context.Context, arg ListStudentsWit
 	return items, nil
 }
 
-const markMistakeResolved = `-- name: MarkMistakeResolved :execrows
-UPDATE mistakes
-SET is_resolved = 1
-WHERE id = ?
-`
-
-// NEW UI INFRASTRUCTURE: close a mistake after remediation is assigned.
-func (q *Queries) MarkMistakeResolved(ctx context.Context, id int64) (int64, error) {
-	result, err := q.db.ExecContext(ctx, markMistakeResolved, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const saveAssignment = `-- name: SaveAssignment :one
 INSERT INTO assignments (
-    title, assignment_type, status, assigned_at, assignee_id, target_page_id, items_json
-) VALUES (?, ?, ?, ?, ?, ?, ?)
+	title, assignment_type, status, assigned_at, assignee_id, target_page_id, student_page_web_url, teacher_page_web_url, items_json,
+    origin_mistake_id, depth
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(target_page_id) DO UPDATE SET
     title = excluded.title,
     assignment_type = excluded.assignment_type,
     status = excluded.status,
     assigned_at = excluded.assigned_at,
     assignee_id = excluded.assignee_id,
-    items_json = excluded.items_json
+	student_page_web_url = excluded.student_page_web_url,
+	teacher_page_web_url = excluded.teacher_page_web_url,
+    items_json = excluded.items_json,
+    origin_mistake_id = excluded.origin_mistake_id,
+    depth = excluded.depth
 RETURNING id
 `
 
 type SaveAssignmentParams struct {
-	Title          string    `db:"title" json:"title"`
-	AssignmentType string    `db:"assignment_type" json:"assignment_type"`
-	Status         string    `db:"status" json:"status"`
-	AssignedAt     time.Time `db:"assigned_at" json:"assigned_at"`
-	AssigneeID     int64     `db:"assignee_id" json:"assignee_id"`
-	TargetPageID   string    `db:"target_page_id" json:"target_page_id"`
-	ItemsJson      string    `db:"items_json" json:"items_json"`
+	Title             string        `db:"title" json:"title"`
+	AssignmentType    string        `db:"assignment_type" json:"assignment_type"`
+	Status            string        `db:"status" json:"status"`
+	AssignedAt        time.Time     `db:"assigned_at" json:"assigned_at"`
+	AssigneeID        int64         `db:"assignee_id" json:"assignee_id"`
+	TargetPageID      string        `db:"target_page_id" json:"target_page_id"`
+	StudentPageWebUrl string        `db:"student_page_web_url" json:"student_page_web_url"`
+	TeacherPageWebUrl string        `db:"teacher_page_web_url" json:"teacher_page_web_url"`
+	ItemsJson         string        `db:"items_json" json:"items_json"`
+	OriginMistakeID   sql.NullInt64 `db:"origin_mistake_id" json:"origin_mistake_id"`
+	Depth             int64         `db:"depth" json:"depth"`
 }
 
 // NEW INFRASTRUCTURE: insert/update Assignment by OneNote PageID.
@@ -722,7 +868,11 @@ func (q *Queries) SaveAssignment(ctx context.Context, arg SaveAssignmentParams) 
 		arg.AssignedAt,
 		arg.AssigneeID,
 		arg.TargetPageID,
+		arg.StudentPageWebUrl,
+		arg.TeacherPageWebUrl,
 		arg.ItemsJson,
+		arg.OriginMistakeID,
+		arg.Depth,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -742,6 +892,37 @@ type SetSettingParams struct {
 
 func (q *Queries) SetSetting(ctx context.Context, arg SetSettingParams) error {
 	_, err := q.db.ExecContext(ctx, setSetting, arg.Key, arg.Value)
+	return err
+}
+
+const updateDefaultStudentName = `-- name: UpdateDefaultStudentName :exec
+UPDATE students
+SET name = CASE
+    WHEN ? <> '' THEN ?
+    ELSE printf('%s%d', ?, id)
+END
+WHERE class = ?
+  AND (name = ? OR name GLOB ?)
+`
+
+type UpdateDefaultStudentNameParams struct {
+	Column1 interface{} `db:"column_1" json:"column_1"`
+	Name    string      `db:"name" json:"name"`
+	PRINTF  interface{} `db:"PRINTF" json:"PRINTF"`
+	Class   string      `db:"class" json:"class"`
+	Name_2  string      `db:"name_2" json:"name_2"`
+	Name_3  string      `db:"name_3" json:"name_3"`
+}
+
+func (q *Queries) UpdateDefaultStudentName(ctx context.Context, arg UpdateDefaultStudentNameParams) error {
+	_, err := q.db.ExecContext(ctx, updateDefaultStudentName,
+		arg.Column1,
+		arg.Name,
+		arg.PRINTF,
+		arg.Class,
+		arg.Name_2,
+		arg.Name_3,
+	)
 	return err
 }
 
@@ -867,6 +1048,47 @@ func (q *Queries) UpdateLessonDraftUserContent(ctx context.Context, arg UpdateLe
 	return err
 }
 
+const updateMistake = `-- name: UpdateMistake :execrows
+UPDATE mistakes
+SET source_assignment_id = ?,
+    parent_mistake_id = ?,
+    depth = ?,
+    topic = ?,
+    error_reason = ?,
+    status = ?,
+    created_at = ?
+WHERE id = ?
+`
+
+type UpdateMistakeParams struct {
+	SourceAssignmentID int64         `db:"source_assignment_id" json:"source_assignment_id"`
+	ParentMistakeID    sql.NullInt64 `db:"parent_mistake_id" json:"parent_mistake_id"`
+	Depth              int64         `db:"depth" json:"depth"`
+	Topic              string        `db:"topic" json:"topic"`
+	ErrorReason        string        `db:"error_reason" json:"error_reason"`
+	Status             string        `db:"status" json:"status"`
+	CreatedAt          time.Time     `db:"created_at" json:"created_at"`
+	ID                 int64         `db:"id" json:"id"`
+}
+
+// Persist all domain-owned fields after a lifecycle transition.
+func (q *Queries) UpdateMistake(ctx context.Context, arg UpdateMistakeParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateMistake,
+		arg.SourceAssignmentID,
+		arg.ParentMistakeID,
+		arg.Depth,
+		arg.Topic,
+		arg.ErrorReason,
+		arg.Status,
+		arg.CreatedAt,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const updateStudent = `-- name: UpdateStudent :execrows
 UPDATE students
 SET name = ?, cycle_start_day = ?, student_workspace_id = ?, teacher_workspace_id = ?
@@ -893,6 +1115,23 @@ func (q *Queries) UpdateStudent(ctx context.Context, arg UpdateStudentParams) (i
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateStudentMeetIdentity = `-- name: UpdateStudentMeetIdentity :exec
+UPDATE students
+SET meeting_code = ?, space_name = ?
+WHERE class = ?
+`
+
+type UpdateStudentMeetIdentityParams struct {
+	MeetingCode string `db:"meeting_code" json:"meeting_code"`
+	SpaceName   string `db:"space_name" json:"space_name"`
+	Class       string `db:"class" json:"class"`
+}
+
+func (q *Queries) UpdateStudentMeetIdentity(ctx context.Context, arg UpdateStudentMeetIdentityParams) error {
+	_, err := q.db.ExecContext(ctx, updateStudentMeetIdentity, arg.MeetingCode, arg.SpaceName, arg.Class)
+	return err
 }
 
 const upsertMeeting = `-- name: UpsertMeeting :one

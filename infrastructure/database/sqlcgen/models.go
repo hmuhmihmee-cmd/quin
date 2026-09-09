@@ -10,14 +10,18 @@ import (
 )
 
 type Assignment struct {
-	ID             int64     `db:"id" json:"id"`
-	Title          string    `db:"title" json:"title"`
-	AssignmentType string    `db:"assignment_type" json:"assignment_type"`
-	Status         string    `db:"status" json:"status"`
-	AssignedAt     time.Time `db:"assigned_at" json:"assigned_at"`
-	AssigneeID     int64     `db:"assignee_id" json:"assignee_id"`
-	TargetPageID   string    `db:"target_page_id" json:"target_page_id"`
-	ItemsJson      string    `db:"items_json" json:"items_json"`
+	ID                int64         `db:"id" json:"id"`
+	Title             string        `db:"title" json:"title"`
+	AssignmentType    string        `db:"assignment_type" json:"assignment_type"`
+	Status            string        `db:"status" json:"status"`
+	AssignedAt        time.Time     `db:"assigned_at" json:"assigned_at"`
+	AssigneeID        int64         `db:"assignee_id" json:"assignee_id"`
+	TargetPageID      string        `db:"target_page_id" json:"target_page_id"`
+	StudentPageWebUrl string        `db:"student_page_web_url" json:"student_page_web_url"`
+	TeacherPageWebUrl string        `db:"teacher_page_web_url" json:"teacher_page_web_url"`
+	ItemsJson         string        `db:"items_json" json:"items_json"`
+	OriginMistakeID   sql.NullInt64 `db:"origin_mistake_id" json:"origin_mistake_id"`
+	Depth             int64         `db:"depth" json:"depth"`
 }
 
 type LessonDraft struct {
@@ -45,13 +49,15 @@ type Meeting struct {
 }
 
 type Mistake struct {
-	ID           int64     `db:"id" json:"id"`
-	StudentID    int64     `db:"student_id" json:"student_id"`
-	AssignmentID int64     `db:"assignment_id" json:"assignment_id"`
-	Topic        string    `db:"topic" json:"topic"`
-	ErrorReason  string    `db:"error_reason" json:"error_reason"`
-	IsResolved   int64     `db:"is_resolved" json:"is_resolved"`
-	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	ID                 int64         `db:"id" json:"id"`
+	StudentID          int64         `db:"student_id" json:"student_id"`
+	SourceAssignmentID int64         `db:"source_assignment_id" json:"source_assignment_id"`
+	ParentMistakeID    sql.NullInt64 `db:"parent_mistake_id" json:"parent_mistake_id"`
+	Depth              int64         `db:"depth" json:"depth"`
+	Topic              string        `db:"topic" json:"topic"`
+	ErrorReason        string        `db:"error_reason" json:"error_reason"`
+	Status             string        `db:"status" json:"status"`
+	CreatedAt          time.Time     `db:"created_at" json:"created_at"`
 }
 
 type Participant struct {
@@ -67,6 +73,8 @@ type Student struct {
 	ID                 int64          `db:"id" json:"id"`
 	Class              string         `db:"class" json:"class"`
 	Name               string         `db:"name" json:"name"`
+	MeetingCode        string         `db:"meeting_code" json:"meeting_code"`
+	SpaceName          string         `db:"space_name" json:"space_name"`
 	StudentWorkspaceID sql.NullString `db:"student_workspace_id" json:"student_workspace_id"`
 	TeacherWorkspaceID sql.NullString `db:"teacher_workspace_id" json:"teacher_workspace_id"`
 	CycleStartDay      int64          `db:"cycle_start_day" json:"cycle_start_day"`

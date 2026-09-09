@@ -29,6 +29,7 @@ type Section struct {
 type Exercise struct {
 	ID          int      `json:"id"`
 	Type        string   `json:"type"`
+	Topic 		string   `json:"topic"`
 	Difficulty  string   `json:"difficulty"`
 	Question    string   `json:"question"`
 	Options     []string `json:"options,omitempty"`

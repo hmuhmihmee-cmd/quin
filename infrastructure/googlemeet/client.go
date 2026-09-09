@@ -20,9 +20,7 @@ import (
 )
 
 const meetAPIBase = "https://meet.googleapis.com/v2"
-
-// Khai báo múi giờ Việt Nam (UTC+7) dùng cho toàn bộ package hạ tầng này
-var vnLocation = time.FixedZone("ICT", 7*3600)
+const calendarAPIBase = "https://www.googleapis.com/calendar/v3"
 
 type Client struct {
 	config    *oauth2.Config
@@ -33,7 +31,10 @@ func New(credentials []byte, tokenPath, redirectURL string) (*Client, error) {
 	if len(credentials) == 0 {
 		return nil, errors.New("cấu hình Google OAuth nhúng trong ứng dụng đang trống")
 	}
-	cfg, err := google.ConfigFromJSON(credentials, "https://www.googleapis.com/auth/meetings.space.readonly")
+	cfg, err := google.ConfigFromJSON(credentials,
+		"https://www.googleapis.com/auth/meetings.space.readonly",
+		"https://www.googleapis.com/auth/calendar.readonly",
+	)
 	if err != nil {
 		return nil, fmt.Errorf("cấu hình Google OAuth không hợp lệ: %w", err)
 	}
@@ -93,8 +94,8 @@ func (c *Client) getHTTPClient(ctx context.Context) (*http.Client, error) {
 		return c.config.Client(ctx, &token), nil
 	}
 	err = c.saveToken(freshToken)
-	if err!=nil{
-		return nil,err
+	if err != nil {
+		return nil, err
 	}
 	return c.config.Client(ctx, freshToken), nil
 }
@@ -106,6 +107,7 @@ func (c *Client) saveToken(token *oauth2.Token) error {
 	// Tự động tạo và ghi đè file với quyền bảo mật 0600
 	return os.WriteFile(c.tokenPath, data, 0600)
 }
+
 // ==================== IMPLEMENT ListMeetRepoForSync ====================
 
 func (c *Client) ListMeetingsFrom(ctx context.Context, fromTime time.Time) ([]domain.Meeting, error) {
@@ -114,7 +116,13 @@ func (c *Client) ListMeetingsFrom(ctx context.Context, fromTime time.Time) ([]do
 		return nil, err
 	}
 
-	// 1. CHIỀU ĐI: Nhận giờ UTC+7 từ Application -> Đổi sang UTC để gửi cho Google
+	calendarTitles, err := c.calendarTitlesByMeetingCode(ctx, client, fromTime)
+	if err != nil {
+		return nil, err
+	}
+	spaceDetails := make(map[string]meetingSpace)
+
+	// Domain và database chuẩn hoá UTC; Google Meet cũng nhận filter RFC3339 UTC.
 	filter := fmt.Sprintf("start_time >= %q", fromTime.UTC().Format(time.RFC3339))
 	var meetings []domain.Meeting
 	pageToken := ""
@@ -140,30 +148,41 @@ func (c *Client) ListMeetingsFrom(ctx context.Context, fromTime time.Time) ([]do
 		}
 
 		for _, rec := range page.Records {
-			// 2. CHIỀU VỀ: Nhận UTC từ Google -> Đổi ngay sang UTC+7 trước khi tạo domain.Meeting
+			spaceID := strings.TrimPrefix(rec.Space, "spaces/")
+			details, found := spaceDetails[spaceID]
+			if !found {
+				details, err = c.getMeetingSpace(ctx, client, spaceID)
+				if err != nil {
+					return nil, fmt.Errorf("lấy mã Meet của %s: %w", rec.Space, err)
+				}
+				spaceDetails[spaceID] = details
+			}
+			// Google trả RFC3339 UTC. Chỉ frontend mới quy đổi sang giờ Việt Nam.
 			startedAtUTC, err := time.Parse(time.RFC3339, rec.StartTime)
 			if err != nil {
 				continue
 			}
-			startedAtVN := startedAtUTC.In(vnLocation)
+			startedAtUTC = startedAtUTC.UTC()
 
-			var endedAtVN time.Time
+			var endedAtUTC time.Time
 			if rec.EndTime != "" {
 				if t, err := time.Parse(time.RFC3339, rec.EndTime); err == nil {
-					endedAtVN = t.In(vnLocation)
+					endedAtUTC = t.UTC()
 				}
 			}
 
-			participants, err := c.listParticipants(ctx, client, rec.Name, startedAtVN, endedAtVN)
+			participants, err := c.listParticipants(ctx, client, rec.Name, startedAtUTC, endedAtUTC)
 			if err != nil {
 				return nil, fmt.Errorf("lấy người tham gia %s: %w", rec.Name, err)
 			}
 
 			meetings = append(meetings, domain.Meeting{
 				ID:           strings.TrimPrefix(rec.Name, "conferenceRecords/"),
-				Class:        strings.TrimPrefix(rec.Space, "spaces/"),
-				StartedAt:    startedAtVN, // Trả về giờ VN thuần túy
-				EndedAt:      endedAtVN,   // Trả về giờ VN thuần túy
+				Class:        spaceID,
+				MeetingCode:  details.MeetingCode,
+				SpaceName:    calendarTitles[strings.ToLower(details.MeetingCode)],
+				StartedAt:    startedAtUTC,
+				EndedAt:      endedAtUTC,
 				Participants: participants,
 			})
 		}
@@ -177,7 +196,108 @@ func (c *Client) ListMeetingsFrom(ctx context.Context, fromTime time.Time) ([]do
 	return meetings, nil
 }
 
-func (c *Client) listParticipants(ctx context.Context, client *http.Client, recordName string, meetStartVN, meetEndVN time.Time) ([]domain.Participant, error) {
+type meetingSpace struct {
+	MeetingCode string
+}
+
+func (c *Client) getMeetingSpace(ctx context.Context, client *http.Client, spaceID string) (meetingSpace, error) {
+	var response struct {
+		MeetingCode string `json:"meetingCode"`
+	}
+	if err := c.getJSON(ctx, client, fmt.Sprintf("%s/spaces/%s", meetAPIBase, url.PathEscape(spaceID)), &response); err != nil {
+		return meetingSpace{}, err
+	}
+	if strings.TrimSpace(response.MeetingCode) == "" {
+		return meetingSpace{}, errors.New("Google Meet không trả meetingCode")
+	}
+	return meetingSpace{MeetingCode: response.MeetingCode}, nil
+}
+
+// calendarTitlesByMeetingCode đọc Calendar một lần mỗi lượt sync. Nó chỉ lấy
+// title và điểm vào Meet để gắn tên lịch do giáo viên đặt, không sửa Calendar.
+func (c *Client) calendarTitlesByMeetingCode(ctx context.Context, client *http.Client, fromTime time.Time) (map[string]string, error) {
+	result := make(map[string]string)
+	pageToken := ""
+	for {
+		query := url.Values{
+			"singleEvents": {"false"},
+			"timeMin":      {fromTime.UTC().Add(-24 * time.Hour).Format(time.RFC3339)},
+			"timeMax":      {time.Now().UTC().AddDate(1, 0, 0).Format(time.RFC3339)},
+			"maxResults":   {"2500"},
+			"fields":       {"items(summary,hangoutLink,conferenceData(entryPoints(entryPointType,uri,meetingCode))),nextPageToken"},
+		}
+		if pageToken != "" {
+			query.Set("pageToken", pageToken)
+		}
+		var response struct {
+			Items []struct {
+				Summary        string `json:"summary"`
+				HangoutLink    string `json:"hangoutLink"`
+				ConferenceData struct {
+					EntryPoints []struct {
+						EntryPointType string `json:"entryPointType"`
+						URI            string `json:"uri"`
+						MeetingCode    string `json:"meetingCode"`
+					} `json:"entryPoints"`
+				} `json:"conferenceData"`
+			} `json:"items"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+		if err := c.getJSON(ctx, client, calendarAPIBase+"/calendars/primary/events?"+query.Encode(), &response); err != nil {
+			return nil, fmt.Errorf("đọc Google Calendar (hãy kết nối Google lại để cấp quyền Calendar): %w", err)
+		}
+		for _, event := range response.Items {
+			title := strings.TrimSpace(event.Summary)
+			if title == "" {
+				continue
+			}
+			for _, code := range eventMeetingCodes(event) {
+				result[strings.ToLower(code)] = title
+			}
+		}
+		pageToken = response.NextPageToken
+		if pageToken == "" {
+			return result, nil
+		}
+	}
+}
+
+func eventMeetingCodes(event struct {
+	Summary        string `json:"summary"`
+	HangoutLink    string `json:"hangoutLink"`
+	ConferenceData struct {
+		EntryPoints []struct {
+			EntryPointType string `json:"entryPointType"`
+			URI            string `json:"uri"`
+			MeetingCode    string `json:"meetingCode"`
+		} `json:"entryPoints"`
+	} `json:"conferenceData"`
+}) []string {
+	seen := map[string]struct{}{}
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if parsed, err := url.Parse(value); err == nil && parsed.Host == "meet.google.com" {
+			value = strings.Trim(parsed.Path, "/")
+		}
+		if value != "" {
+			seen[strings.ToLower(value)] = struct{}{}
+		}
+	}
+	add(event.HangoutLink)
+	for _, entry := range event.ConferenceData.EntryPoints {
+		if entry.EntryPointType == "video" {
+			add(entry.MeetingCode)
+			add(entry.URI)
+		}
+	}
+	values := make([]string, 0, len(seen))
+	for value := range seen {
+		values = append(values, value)
+	}
+	return values
+}
+
+func (c *Client) listParticipants(ctx context.Context, client *http.Client, recordName string, meetStartUTC, meetEndUTC time.Time) ([]domain.Participant, error) {
 	var participants []domain.Participant
 	pageToken := ""
 
@@ -212,12 +332,12 @@ func (c *Client) listParticipants(ctx context.Context, client *http.Client, reco
 				displayName = p.AnonymousUser.DisplayName
 			}
 
-			firstJoinVN, lastLeaveVN, duration := c.readSessions(ctx, client, p.Name, meetStartVN, meetEndVN)
-			if !firstJoinVN.IsZero() {
+			firstJoinUTC, lastLeaveUTC, duration := c.readSessions(ctx, client, p.Name, meetStartUTC, meetEndUTC)
+			if !firstJoinUTC.IsZero() {
 				participants = append(participants, domain.Participant{
 					Name:          displayName,
-					FirstJoinedAt: firstJoinVN, // Giờ VN
-					LastLeftAt:    lastLeaveVN,  // Giờ VN
+					FirstJoinedAt: firstJoinUTC,
+					LastLeftAt:    lastLeaveUTC,
 					Duration:      duration,
 				})
 			}
@@ -232,7 +352,7 @@ func (c *Client) listParticipants(ctx context.Context, client *http.Client, reco
 	return participants, nil
 }
 
-func (c *Client) readSessions(ctx context.Context, client *http.Client, participantName string, meetStartVN, meetEndVN time.Time) (time.Time, time.Time, int) {
+func (c *Client) readSessions(ctx context.Context, client *http.Client, participantName string, meetStartUTC, meetEndUTC time.Time) (time.Time, time.Time, int) {
 	var intervals [][2]time.Time
 	pageToken := ""
 
@@ -261,19 +381,17 @@ func (c *Client) readSessions(ctx context.Context, client *http.Client, particip
 				continue
 			}
 
-			// Chuyển session về giờ VN
-			startVN := startUTC.In(vnLocation)
-			var endVN time.Time
+			startUTC = startUTC.UTC()
 			if err2 == nil {
-				endVN = endUTC.In(vnLocation)
+				endUTC = endUTC.UTC()
 			} else {
-				endVN = meetEndVN
-				if endVN.IsZero() {
-					endVN = time.Now().In(vnLocation)
+				endUTC = meetEndUTC
+				if endUTC.IsZero() {
+					endUTC = time.Now().UTC()
 				}
 			}
 
-			intervals = append(intervals, [2]time.Time{startVN, endVN})
+			intervals = append(intervals, [2]time.Time{startUTC, endUTC})
 		}
 
 		pageToken = page.NextPageToken
@@ -282,7 +400,7 @@ func (c *Client) readSessions(ctx context.Context, client *http.Client, particip
 		}
 	}
 
-	return calculateDuration(intervals, meetStartVN, meetEndVN)
+	return calculateDuration(intervals, meetStartUTC, meetEndUTC)
 }
 
 func (c *Client) getJSON(ctx context.Context, client *http.Client, endpoint string, target any) error {

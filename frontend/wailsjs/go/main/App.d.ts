@@ -41,7 +41,9 @@ export function ListStudentMistakes():Promise<Array<application.StudentMistakeGr
 
 export function ListWorkspaces():Promise<Array<domain.Workspace>>;
 
-export function PublishLessonToOneNote(arg1:application.PublishLessonCommand):Promise<void>;
+export function OpenExternalURL(arg1:string):Promise<void>;
+
+export function PublishLessonToOneNote(arg1:application.PublishLessonCommand):Promise<application.PublishResult>;
 
 export function PushAssignmentFeedback(arg1:string):Promise<void>;
 

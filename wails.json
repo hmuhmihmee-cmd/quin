@@ -1,7 +1,7 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "meet-attendance-clean",
-  "outputfilename": "meet-attendance-clean",
+  "name": "QUIN",
+  "outputfilename": "quin-1.0",
   "frontend:dir": "frontend",
   "wailsjsdir": "./frontend",
   "version": "2",
@@ -9,8 +9,8 @@
     "name": "QuanAnh"
   },
   "info": {
-    "companyName": "Lớp Học 1-1",
-    "productName": "Sổ Buổi Học & Soạn Giáo Án",
+    "companyName": "QUIN",
+    "productName": "QUIN",
     "productVersion": "1.0.0",
     "copyright": "Copyright 2026"
   }

@@ -42,8 +42,8 @@ function initDateFilters() {
   const to = new Date(now);
   const from = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000); // 60 days ago
 
-  document.getElementById("filter-from").value = from.toISOString().split('T')[0];
-  document.getElementById("filter-to").value = to.toISOString().split('T')[0];
+  document.getElementById("filter-from").value = formatDateForVietnam(from);
+  document.getElementById("filter-to").value = formatDateForVietnam(to);
   
   // Set month picker to current month for display
   const year = now.getFullYear();
@@ -69,10 +69,10 @@ async function loadDashboard() {
     const fromDateStr = document.getElementById("filter-from").value;
     const toDateStr = document.getElementById("filter-to").value;
     
-    // Gửi ISO string, để Wails/Go parse
     const filter = {
-      from_date: fromDateStr + "T00:00:00Z",
-      to_date: toDateStr + "T23:59:59Z",
+      // Người dùng chọn ngày Việt Nam; backend nhận khoảng UTC tương ứng.
+      from_date: vietnamDayBoundaryISO(fromDateStr, false),
+      to_date: vietnamDayBoundaryISO(toDateStr, true),
       min_duration_minutes: parseInt(document.getElementById("filter-min-duration").value) || 0,
       SearchName: searchVal ? searchVal : null
     };
@@ -99,7 +99,7 @@ async function loadDashboard() {
       tr.onclick = () => openStudentDetail(s.id);
       tr.innerHTML = `
         <td><strong>${s.name}</strong></td>
-        <td><code>${s.class}</code></td>
+        <td>${renderMeetIdentity(s.space_name, s.meeting_code, s.class)}</td>
         <td>Ngày ${s.cycle_start_day} hàng tháng</td>
         <td><strong style="color:#15803d">${s.total_sessions}</strong> buổi</td>
         <td>${formatDuration(s.total_duration_minutes)}</td>
@@ -151,15 +151,17 @@ async function openStudentDetail(studentId) {
   document.getElementById("detail-filter-min-duration").value = document.getElementById("filter-min-duration").value;
   
   const filter = {
-    from_date: fromDateStr + "T00:00:00Z",
-    to_date: toDateStr + "T23:59:59Z",
+    from_date: vietnamDayBoundaryISO(fromDateStr, false),
+    to_date: vietnamDayBoundaryISO(toDateStr, true),
     min_duration_minutes: parseInt(document.getElementById("filter-min-duration").value) || 0
   };
 
   try {
     const data = await window.go.main.App.GetStudentDetail(studentId, filter);
     document.getElementById("detail-name").innerText = data.student.name;
-    document.getElementById("detail-space").innerText = `Space ID: ${data.student.class}`;
+    const identity = data.student.space_name || data.student.meeting_code || data.student.class;
+    const code = data.student.meeting_code ? ` · Meet: ${data.student.meeting_code}` : "";
+    document.getElementById("detail-space").innerText = `${identity}${code}`;
     document.getElementById("detail-stat-sessions").innerText = data.total_sessions + " buổi";
     document.getElementById("detail-stat-duration").innerText = formatDuration(data.total_duration_minutes);
 
@@ -191,6 +193,14 @@ async function openStudentDetail(studentId) {
   }
 }
 
+function renderMeetIdentity(spaceName, meetingCode, spaceID) {
+  const title = String(spaceName || "").trim();
+  const code = String(meetingCode || "").trim();
+  if (title) return `<strong>${escapeHTML(title)}</strong>${code ? `<br><code>${escapeHTML(code)}</code>` : ""}`;
+  if (code) return `<code>${escapeHTML(code)}</code>`;
+  return `<code title="Mã kỹ thuật Google Meet">${escapeHTML(spaceID)}</code>`;
+}
+
 async function reloadStudentDetail() {
   if (!currentStudentId) return;
   
@@ -198,8 +208,8 @@ async function reloadStudentDetail() {
   const toDateStr = document.getElementById("detail-filter-to").value;
   
   const filter = {
-    from_date: fromDateStr + "T00:00:00Z",
-    to_date: toDateStr + "T23:59:59Z",
+    from_date: vietnamDayBoundaryISO(fromDateStr, false),
+    to_date: vietnamDayBoundaryISO(toDateStr, true),
     min_duration_minutes: parseInt(document.getElementById("detail-filter-min-duration").value) || 0
   };
 
@@ -251,7 +261,7 @@ async function handleUpdateStudent() {
 
 async function loadAIModels() {
   const select = document.getElementById("lesson-model-select");
-  const defaultModel = "gemini-3.7-flash";
+  const defaultModel = "gemini-3.5-flash";
 
   try {
     const models = await window.go.main.App.ListAIModels();
@@ -272,7 +282,7 @@ async function loadAIModels() {
   } catch (e) {
     // Giữ lựa chọn mặc định trong HTML khi không thể tải danh sách từ API.
     select.value = defaultModel;
-    console.log("Không thể tải danh sách models, dùng Gemini 3.7 Flash mặc định");
+    console.log("Không thể tải danh sách models, dùng Gemini 3.5 Flash mặc định");
   }
 }
 
@@ -604,11 +614,27 @@ async function loadGradingPages() {
     body.innerHTML = rows.map(row => `<tr>
       <td><strong>${escapeHTML(row.student_name)}</strong><br><span class="text-muted">${escapeHTML(row.title)}</span></td>
       <td>${formatDateTime(row.assigned_at)}</td>
-      <td>${row.status === "graded" ? `<span class="badge badge-completed">Đã chấm ${row.correct_count}/${row.total_count}</span>` : `<span class="badge badge-processing">Đã chấm ${row.graded_count}/${row.total_count}</span>`}</td>
-      <td><button class="btn btn-primary compact" onclick="openGradingPage('${escapeHTML(row.page_id)}')">Chấm bài</button></td>
+      <td>${renderCorrectAnswerCount(row)}</td>
+      <td><div class="assignment-actions">
+        <button class="btn btn-secondary compact" ${row.student_page_web_url ? "" : "disabled"} onclick="openOneNotePage('${escapeHTML(row.student_page_web_url)}')">Mở HS</button>
+        <button class="btn btn-secondary compact" ${row.teacher_page_web_url ? "" : "disabled"} onclick="openOneNotePage('${escapeHTML(row.teacher_page_web_url)}')">Mở GV</button>
+        <button class="btn btn-primary compact" onclick="openGradingPage('${escapeHTML(row.page_id)}')">Chấm bài</button>
+      </div></td>
     </tr>`).join("");
   } catch (err) {
     body.innerHTML = `<tr><td colspan="4" class="empty-cell error-text">${escapeHTML(normalizeError(err))}</td></tr>`;
+  }
+}
+
+async function openOneNotePage(pageURL) {
+  if (!pageURL) {
+    showToast("Bài đã giao từ phiên bản cũ chưa có liên kết OneNote", true);
+    return;
+  }
+  try {
+    await window.go.main.App.OpenExternalURL(pageURL);
+  } catch (err) {
+    showToast("Không thể mở OneNote: " + normalizeError(err), true);
   }
 }
 
@@ -629,13 +655,29 @@ async function openGradingPage(pageID) {
     copyModelOptions("grading-model");
     document.getElementById("grade-select-all").checked = true;
     document.getElementById("grading-items").innerHTML = (currentGradingAssignment.items || []).map(item => {
-      const result = item.result;
-      const status = !result ? "Chưa chấm" : result.status === "skipped_empty" ? "Chưa làm" : result.is_correct ? "Đúng" : "Sai";
-      return `<label class="grading-item"><input type="checkbox" class="grade-item-check" value="${item.exercise.id}" checked><span><strong>Câu ${item.exercise.id}</strong> · ${escapeHTML(item.exercise.type)} · <span class="result-${result?.is_correct ? "correct" : result ? "wrong" : "pending"}">${status}</span><br><span>${escapeHTML(item.exercise.question)}</span></span></label>`;
+      const status = gradingItemStatus(item);
+      return `<label class="grading-item"><input type="checkbox" class="grade-item-check" value="${item.exercise.id}" checked><span><strong>Câu ${item.exercise.id}</strong> · ${escapeHTML(item.exercise.type)} · <span class="result-${status.tone}">${status.label}</span><br><span>${escapeHTML(item.exercise.question)}</span></span></label>`;
     }).join("");
 	document.getElementById("btn-push-feedback").classList.toggle("hidden", !(currentGradingAssignment.items || []).some(item => item.result));
     navigate("grading-detail");
   } catch (err) { showToast("Không thể mở bài: " + normalizeError(err), true); }
+}
+
+function gradingItemStatus(item) {
+  const result = item.result;
+  if (!result) return { label: "Chưa chấm", tone: "pending" };
+
+  // awaiting_selection là trạng thái chưa hoàn tất, tuyệt đối không được hiển thị là Sai.
+  if (result.status === "awaiting_selection") {
+    const selection = item.student_answer?.choice_selection;
+    if (selection === "multiple") return { label: "Không hợp lệ: chọn nhiều đáp án", tone: "pending" };
+    if (selection === "unselected") return { label: "Chưa chọn đáp án", tone: "pending" };
+    return { label: "Chưa hoàn tất", tone: "pending" };
+  }
+
+  if (result.status === "skipped_empty") return { label: "Chưa làm", tone: "pending" };
+  if (result.is_correct) return { label: "Đúng", tone: "correct" };
+  return { label: "Sai", tone: "wrong" };
 }
 
 async function handlePushFeedback() {
@@ -672,8 +714,32 @@ async function loadStudentMistakes() {
     const groups = await window.go.main.App.ListStudentMistakes();
 	mistakeById = new Map((groups || []).flatMap(group => (group.mistakes || []).map(m => [m.id, m])));
     if (!groups?.length) { container.innerHTML = `<div class="card empty-cell">Chưa ghi nhận lỗi sai nào.</div>`; return; }
-    container.innerHTML = groups.map(group => `<details class="card mistake-group"><summary><strong>${escapeHTML(group.student_name)}</strong><span>${group.mistakes.length} lỗi</span></summary><div class="mistake-list">${group.mistakes.map(m => `<div class="mistake-row"><div><strong>${escapeHTML(m.topic)}</strong><p>${escapeHTML(m.error_reason)}</p></div>${m.is_resolved ? `<span class="badge badge-completed">Đã giao bài khắc phục</span>` : `<button class="btn btn-secondary compact" onclick="openRemediationModal(${m.id})">Tạo bài tập</button>`}</div>`).join("")}</div></details>`).join("");
+    container.innerHTML = groups.map(group => `<details class="card mistake-group"><summary><strong>${escapeHTML(group.student_name)}</strong><span>${group.mistakes.length} lỗi</span></summary><div class="mistake-list">${group.mistakes.map(m => `<div class="mistake-row"><div><strong>${escapeHTML(m.topic)}</strong><p>${escapeHTML(m.error_reason)}</p></div><div class="mistake-row-actions">${renderMistakeStatus(m)}${canCreateRemediation(m) ? `<button class="btn btn-secondary compact" onclick="openRemediationModal(${m.id})">Tạo bài tập</button>` : ""}</div></div>`).join("")}</div></details>`).join("");
   } catch (err) { container.innerHTML = `<div class="card empty-cell error-text">${escapeHTML(normalizeError(err))}</div>`; }
+}
+
+function renderCorrectAnswerCount(row) {
+  const correct = Number(row.correct_count || 0);
+  const total = Number(row.total_count || 0);
+  const isAllCorrect = total > 0 && correct === total;
+  return `<span class="badge ${isAllCorrect ? "badge-completed" : "badge-processing"}">${correct}/${total} câu đúng</span>`;
+}
+
+function renderMistakeStatus(mistake) {
+  switch (mistake.status) {
+    case "remediating":
+      return `<span class="badge badge-processing">Đã giao bài khắc phục</span>`;
+    case "resolved":
+      return `<span class="badge badge-completed">Đã khắc phục</span>`;
+    case "detected":
+    default:
+      // UI chỉ có ba trạng thái nghiệp vụ. Dữ liệu cũ/không rõ vẫn là lỗi mới.
+      return `<span class="badge badge-failed">Đã phát hiện</span>`;
+  }
+}
+
+function canCreateRemediation(mistake) {
+  return !["remediating", "resolved"].includes(mistake.status);
 }
 
 function openRemediationModal(id) {
@@ -689,16 +755,15 @@ function copyModelOptions(targetID) {
   const source = document.getElementById("lesson-model-select");
   const target = document.getElementById(targetID);
   target.innerHTML = source.innerHTML;
-  target.value = source.value || "gemini-3.7-flash";
+  target.value = source.value || "gemini-3.5-flash";
 }
 
 async function handleGenerateRemediation() {
-  const mc = Number(document.getElementById("remediation-mc").value || 0);
-  const essay = Number(document.getElementById("remediation-essay").value || 0);
-  if (mc + essay < 1) { showToast("Hãy chọn ít nhất một câu", true); return; }
+  const count = Number(document.getElementById("remediation-count").value || 0);
+  if (count < 1) { showToast("Hãy chọn ít nhất một câu", true); return; }
   const button = document.getElementById("btn-remediation"); button.disabled = true; button.innerText = "Đang tạo và giao...";
   try {
-    await window.go.main.App.GenerateRemediation({ mistake_id: selectedMistakeId, multiple_choice_count: mc, essay_count: essay, model: document.getElementById("remediation-model").value, custom_prompt: document.getElementById("remediation-prompt").value.trim() });
+    await window.go.main.App.GenerateRemediation({ mistake_id: selectedMistakeId, multiple_choice_count: 0, essay_count: count, model: document.getElementById("remediation-model").value, custom_prompt: document.getElementById("remediation-prompt").value.trim() });
     closeRemediationModal(); showToast("Đã tạo và giao bài khắc phục trên OneNote"); loadStudentMistakes();
   } catch (err) { showToast("Lỗi tạo bài: " + normalizeError(err), true); }
   finally { button.disabled = false; button.innerText = "Tạo và giao bài"; }
@@ -715,8 +780,26 @@ function formatDuration(minutes) {
 
 function formatDateTime(dateStr) {
   if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")} ${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit", minute: "2-digit",
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(new Date(dateStr));
+  const value = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${value.hour}:${value.minute} ${value.day}/${value.month}/${value.year}`;
+}
+
+function formatDateForVietnam(date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function vietnamDayBoundaryISO(date, endOfDay) {
+  return `${date}T${endOfDay ? "23:59:59" : "00:00:00"}+07:00`;
 }
 
 function calculateMinutes(startStr, endStr) {
@@ -726,10 +809,38 @@ function calculateMinutes(startStr, endStr) {
 
 function showToast(msg, isError = false) {
   const t = document.getElementById("toast");
+  clearToastTimer();
   t.innerText = msg;
   t.style.background = isError ? "#b91c1c" : "#0f172a";
   t.classList.remove("hidden");
-  setTimeout(() => t.classList.add("hidden"), 3500);
+  t.dataset.timer = setTimeout(() => t.classList.add("hidden"), 3500);
+}
+
+function showOneNotePublishSuccess() {
+  const t = document.getElementById("toast");
+  clearToastTimer();
+  t.replaceChildren();
+  t.style.background = "#0f172a";
+  t.append("Đã đẩy bài lên sổ giáo viên và học sinh. ");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = "Đi tới chấm bài";
+  button.className = "toast-link";
+  button.addEventListener("click", () => {
+    t.classList.add("hidden");
+    navigate("grading");
+  });
+  t.appendChild(button);
+  t.classList.remove("hidden");
+  t.dataset.timer = setTimeout(() => t.classList.add("hidden"), 12000);
+}
+
+function clearToastTimer() {
+  const t = document.getElementById("toast");
+  if (t.dataset.timer) {
+    clearTimeout(Number(t.dataset.timer));
+    delete t.dataset.timer;
+  }
 }
 
 function debounce(func, wait) {
@@ -820,7 +931,7 @@ async function openPushOneNoteDialog() {
 	}
 	oneNotePublishStudents = students;
 	oneNotePublishWorkspaces = workspaces || [];
-	document.getElementById("on-student-id").innerHTML = students.map(s => `<option value="${s.id}">${escapeHTML(s.name)} · ${escapeHTML(s.class)}</option>`).join("");
+	document.getElementById("on-student-id").innerHTML = students.map(s => `<option value="${s.id}">${escapeHTML(s.name)}</option>`).join("");
 
 	document.getElementById("on-student-chapter-name").value = "";
 	document.getElementById("on-teacher-chapter-name").value = "";
@@ -836,8 +947,8 @@ function refreshOneNotePublishTargets() {
 	const studentID = Number(document.getElementById("on-student-id").value);
 	const student = oneNotePublishStudents.find(item => Number(item.id) === studentID);
 	if (!student) return;
-	renderOneNoteChapterTarget("student", student.student_workspace_id, `${student.name}_${student.class}_HS`);
-	renderOneNoteChapterTarget("teacher", student.teacher_workspace_id, `${student.name}_${student.class}_GV`);
+	renderOneNoteChapterTarget("student", student.student_workspace_id, `${student.name}_HS`);
+	renderOneNoteChapterTarget("teacher", student.teacher_workspace_id, `${student.name}_GV`);
 }
 
 function renderOneNoteChapterTarget(type, workspaceID, fallbackName) {
@@ -857,14 +968,14 @@ function renderOneNoteChapterTarget(type, workspaceID, fallbackName) {
 			select.appendChild(option);
 		}
 	} else if (workspaceID) {
-		status.textContent = "Notebook đã liên kết nhưng chưa đọc được danh sách Chapter; có thể nhập Chapter mới.";
+		status.textContent = "Notebook đã liên kết nhưng chưa đọc được danh sách chương; có thể nhập chương mới.";
 	} else {
 		status.textContent = `Chưa có Notebook; hệ thống sẽ tạo “${fallbackName}”.`;
 	}
 
 	const createOption = document.createElement("option");
 	createOption.value = "__new__";
-	createOption.textContent = "+ Tạo Chapter mới";
+	createOption.textContent = "+ Tạo chương mới";
 	select.appendChild(createOption);
 	if (!workspace || !workspace.chapters || workspace.chapters.length === 0) {
 		select.value = "__new__";
@@ -916,14 +1027,14 @@ async function handleDoPushOneNote() {
   btn.disabled = true;
 
   try {
-    await window.go.main.App.PublishLessonToOneNote({
+    const result = await window.go.main.App.PublishLessonToOneNote({
 	      draft_id: currentDraftId,
 		  student_id: studentID,
 		  student_chapter: studentChapter,
 		  teacher_chapter: teacherChapter,
       page_name: pageTitle,
     });
-    showToast("Đã đẩy bài thành công lên cả 2 sổ OneNote!");
+    showOneNotePublishSuccess();
     closeOneNoteModal();
   } catch (err) {
     showToast("Lỗi đẩy lên OneNote: " + normalizeError(err), true);
