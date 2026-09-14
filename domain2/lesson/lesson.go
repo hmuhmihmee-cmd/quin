@@ -1,12 +1,16 @@
-package domain
+package lesson
 
-import "time"
+import "errors"
 
 type Audience string
 
 const (
 	AudienceTeacher Audience = "teacher"
 	AudienceStudent Audience = "student"
+)
+
+var (
+	ErrErcerciseEmpty = errors.New("exercises is empty")
 )
 
 type TeacherExample struct {
@@ -26,7 +30,7 @@ type Section struct {
 	TeacherExamples   []TeacherExample `json:"teacher_examples"`
 }
 
-type Exercise struct {
+type exercise struct {
 	ID          int      `json:"id"`
 	Type        string   `json:"type"`
 	Topic       string   `json:"topic"`
@@ -41,27 +45,34 @@ type Lesson struct {
 	Title     string     `json:"title"`
 	Overview  string     `json:"overview"`
 	Sections  []Section  `json:"sections"`
-	Exercises []Exercise `json:"exercises"`
+	Exercises []exercise `json:"exercises"`
 }
 
-type DraftStatus string
+func NewLesson(title string, overview string, sections []Section, exercises []exercise) (*Lesson, error) {
+	if len(title) == 0 {
+		title = "Không có tiêu đề"
+	}
 
-const (
-	DraftStatusPending    DraftStatus = "pending"
-	DraftStatusProcessing DraftStatus = "processing"
-	DraftStatusCompleted  DraftStatus = "completed"
-	DraftStatusFailed     DraftStatus = "failed"
-)
+	if len(exercises) == 0 {
+		return nil, ErrErcerciseEmpty
+	}
 
-type LessonDraft struct {
-	ID           int         `json:"id"`
-	SourceURL    string      `json:"source_url"`
-	CustomPrompt string      `json:"custom_prompt"`
-	Status       DraftStatus `json:"status"`
-	ErrorMessage string      `json:"error_message,omitempty"`
-	Title        string      `json:"title"` // Tên bài giảng (AI sinh ra hoặc GV sửa)
-	CreatedAt    time.Time   `json:"created_at"`
-	UpdatedAt    *time.Time  `json:"updated_at"`
-	Model        string      `json:"model"` // Ví dụ: "gemini-1.5-flash"
-	LessonData   *Lesson     `json:"lesson_data,omitempty"`
+	return &Lesson{
+		Title:     title,
+		Overview:  overview,
+		Sections:  sections,
+		Exercises: exercises,
+	}, nil
+}
+func NewExecise(id int, topic string, difficulty string, question string, options []string, answer string, explanation string) exercise {
+	return exercise{
+		ID:          id,
+		Type:        "multiple-choice",
+		Topic:       topic,
+		Difficulty:  difficulty,
+		Question:    question,
+		Options:     options,
+		Answer:      answer,
+		Explanation: explanation,
+	}
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
 	goRuntime "runtime"
 	"strings"
@@ -116,34 +115,34 @@ func (a *App) SaveLessonDraft(draft domain.LessonDraft) error {
 	return a.lessonCmd.SaveDraftContent(a.ctx, draft)
 }
 
-// Xuất PDF: Mở hộp thoại chọn nơi lưu file của Windows/Mac
-func (a *App) ExportAndSavePDF(draftID int) error {
-	teacherDoc, studentDoc, err := a.lessonCmd.ExportDocuments(a.ctx, draftID)
-	if err != nil {
-		return err
-	}
+// // Xuất PDF: Mở hộp thoại chọn nơi lưu file của Windows/Mac
+// func (a *App) ExportAndSavePDF(draftID int) error {
+// 	teacherDoc, studentDoc, err := a.lessonCmd.ExportDocuments(a.ctx, draftID)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	// Mở hộp thoại chọn thư mục lưu file native của hệ điều hành
-	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title: "Chọn thư mục để lưu 2 file PDF",
-	})
-	if err != nil || dir == "" {
-		return nil // Người dùng bấm Hủy
-	}
+// 	// Mở hộp thoại chọn thư mục lưu file native của hệ điều hành
+// 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+// 		Title: "Chọn thư mục để lưu 2 file PDF",
+// 	})
+// 	if err != nil || dir == "" {
+// 		return nil // Người dùng bấm Hủy
+// 	}
 
-	// Ghi 2 file PDF vào thư mục đã chọn
-	teacherPath := fmt.Sprintf("%s/GiaoVien_%s.pdf", dir, teacherDoc.Title)
-	studentPath := fmt.Sprintf("%s/HocSinh_%s.pdf", dir, studentDoc.Title)
+// 	// Ghi 2 file PDF vào thư mục đã chọn
+// 	teacherPath := fmt.Sprintf("%s/GiaoVien_%s.pdf", dir, teacherDoc.Title)
+// 	studentPath := fmt.Sprintf("%s/HocSinh_%s.pdf", dir, studentDoc.Title)
 
-	if err := os.WriteFile(teacherPath, teacherDoc.Data, 0644); err != nil {
-		return fmt.Errorf("lỗi lưu file giáo viên: %w", err)
-	}
-	if err := os.WriteFile(studentPath, studentDoc.Data, 0644); err != nil {
-		return fmt.Errorf("lỗi lưu file học sinh: %w", err)
-	}
+// 	if err := os.WriteFile(teacherPath, teacherDoc.Data, 0644); err != nil {
+// 		return fmt.Errorf("lỗi lưu file giáo viên: %w", err)
+// 	}
+// 	if err := os.WriteFile(studentPath, studentDoc.Data, 0644); err != nil {
+// 		return fmt.Errorf("lỗi lưu file học sinh: %w", err)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // HẠ TẦNG MỚI: bridge để frontend gọi use case chấm Assignment.
 func (a *App) GradeAssignment(cmd application.GradeAssignmentCommand) error {

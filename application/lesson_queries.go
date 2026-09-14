@@ -6,7 +6,7 @@ import (
 )
 
 type LessonAIClient interface {
-	ListModels(ctx context.Context) ([]domain.AIModelInfo, error)
+	ListModels(ctx context.Context) ([]AIModelInfo, error)
 }
 type LessonQuery struct {
 	repo LessonDraftRepo
@@ -26,6 +26,12 @@ func (q *LessonQuery) ListDrafts(ctx context.Context) ([]domain.LessonDraft, err
 func (q *LessonQuery) GetDraft(ctx context.Context, id int) (*domain.LessonDraft, error) {
 	return q.repo.GetByID(ctx, id)
 }
-func (q *LessonQuery) ListModels(ctx context.Context) ([]domain.AIModelInfo, error) {
+func (q *LessonQuery) ListModels(ctx context.Context) ([]AIModelInfo, error) {
 	return q.ai.ListModels(ctx)
+}
+
+type AIModelInfo struct {
+	ID          string `json:"id"`           // Ví dụ: "gemini-1.5-flash", "gemini-2.0-flash"
+	DisplayName string `json:"display_name"` // Ví dụ: "Gemini 1.5 Flash"
+	Description string `json:"description"`  // Mô tả ngắn về model
 }

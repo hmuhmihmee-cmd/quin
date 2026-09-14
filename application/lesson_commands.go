@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"meet-attendance-clean/domain"
 	"net/url"
@@ -29,27 +28,27 @@ type DocumentFormatter interface {
 	Format(lesson *domain.Lesson, target domain.Audience, sourceURL string) string
 }
 
-type DocumentRenderer interface {
-	Render(title, subtitle, content string) (domain.Document, error)
-}
+//	type DocumentRenderer interface {
+//		Render(title, subtitle, content string) (domain.Document, error)
+//	}
 type LessonCommand struct {
 	repo      LessonDraftRepo
 	ai        LessonAI
 	formatter DocumentFormatter
-	renderer  DocumentRenderer
+	// renderer  DocumentRenderer
 }
 
 func NewLessonCommand(
 	repo LessonDraftRepo,
 	ai LessonAI,
 	formatter DocumentFormatter,
-	renderer DocumentRenderer,
+	// renderer DocumentRenderer,
 ) *LessonCommand {
 	return &LessonCommand{
 		repo:      repo,
 		ai:        ai,
 		formatter: formatter,
-		renderer:  renderer,
+		// renderer:  renderer,
 	}
 }
 
@@ -131,30 +130,30 @@ func (c *LessonCommand) SaveDraftContent(ctx context.Context, draft domain.Lesso
 	return c.repo.UpdateDraftLesson(ctx, draft)
 }
 
-// XUẤT PDF: Lôi LessonData có cấu trúc ra rồi Format thành Document
-func (c *LessonCommand) ExportDocuments(ctx context.Context, draftID int) (domain.Document, domain.Document, error) {
-	draft, err := c.repo.GetByID(ctx, draftID)
-	if err != nil {
-		return domain.Document{}, domain.Document{}, fmt.Errorf("không tìm thấy bản nháp: %w", err)
-	}
-	if draft.LessonData == nil {
-		return domain.Document{}, domain.Document{}, errors.New("bản nháp chưa có dữ liệu bài giảng hoàn chỉnh")
-	}
+// // XUẤT PDF: Lôi LessonData có cấu trúc ra rồi Format thành Document
+// func (c *LessonCommand) ExportDocuments(ctx context.Context, draftID int) (domain.Document, domain.Document, error) {
+// 	draft, err := c.repo.GetByID(ctx, draftID)
+// 	if err != nil {
+// 		return domain.Document{}, domain.Document{}, fmt.Errorf("không tìm thấy bản nháp: %w", err)
+// 	}
+// 	if draft.LessonData == nil {
+// 		return domain.Document{}, domain.Document{}, errors.New("bản nháp chưa có dữ liệu bài giảng hoàn chỉnh")
+// 	}
 
-	// 1. Format ra Markdown theo từng vai trò
-	teacherContent := c.formatter.Format(draft.LessonData, domain.AudienceTeacher, draft.SourceURL)
-	studentContent := c.formatter.Format(draft.LessonData, domain.AudienceStudent, "")
+// 	// 1. Format ra Markdown theo từng vai trò
+// 	teacherContent := c.formatter.Format(draft.LessonData, domain.AudienceTeacher, draft.SourceURL)
+// 	studentContent := c.formatter.Format(draft.LessonData, domain.AudienceStudent, "")
 
-	// 2. Render thành PDF Document
-	teacherDoc, err := c.renderer.Render(draft.Title, "GIÁO ÁN GIÁO VIÊN", teacherContent)
-	if err != nil {
-		return domain.Document{}, domain.Document{}, fmt.Errorf("lỗi render PDF giáo viên: %w", err)
-	}
+// 	// 2. Render thành PDF Document
+// 	teacherDoc, err := c.renderer.Render(draft.Title, "GIÁO ÁN GIÁO VIÊN", teacherContent)
+// 	if err != nil {
+// 		return domain.Document{}, domain.Document{}, fmt.Errorf("lỗi render PDF giáo viên: %w", err)
+// 	}
 
-	studentDoc, err := c.renderer.Render(draft.Title, "PHIẾU HỌC TẬP HỌC SINH", studentContent)
-	if err != nil {
-		return domain.Document{}, domain.Document{}, fmt.Errorf("lỗi render PDF học sinh: %w", err)
-	}
+// 	studentDoc, err := c.renderer.Render(draft.Title, "PHIẾU HỌC TẬP HỌC SINH", studentContent)
+// 	if err != nil {
+// 		return domain.Document{}, domain.Document{}, fmt.Errorf("lỗi render PDF học sinh: %w", err)
+// 	}
 
-	return teacherDoc, studentDoc, nil
-}
+// 	return teacherDoc, studentDoc, nil
+// }

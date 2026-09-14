@@ -62,7 +62,7 @@ func main() {
 	meetClient, _ := googlemeet.New(embeddedGoogleCredentials, filepath.Join(dataDir, "token.json"), cfg.GoogleRedirectURL)
 	geminiClient := gemini.New(string(embeddedGeminiKey), cfg.GeminiModel)
 	formatter := pdf.NewFormatter()
-	renderer := pdf.NewRenderer()
+	// renderer := pdf.NewRenderer()
 	// Đọc cấu hình Microsoft OAuth
 	var msCfg struct {
 		ClientID     string `json:"client_id"`
@@ -82,7 +82,7 @@ func main() {
 	// 2. Khởi tạo Application UseCases
 	meetCmd := application.NewMeetCommand(db, meetClient, db, db)
 	meetQuery := application.NewMeetQuery(db)
-	lessonCmd := application.NewLessonCommand(db, geminiClient, formatter, renderer)
+	lessonCmd := application.NewLessonCommand(db, geminiClient, formatter)
 	lessonQuery := application.NewLessonQuery(db, geminiClient)
 	// HẠ TẦNG MỚI: nối các adapter Assignment/OneNote/Gemini vào application.
 	assignmentCmd := application.NewAssignmentCommand(db, db, db, db.Mistakes(), oneNoteClient, geminiClient)
