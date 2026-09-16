@@ -1,6 +1,9 @@
 package lesson
 
-import "errors"
+import (
+	"errors"
+	exercise "meet-attendance-clean/domain2/excercise"
+)
 
 type Audience string
 
@@ -30,25 +33,14 @@ type Section struct {
 	TeacherExamples   []TeacherExample `json:"teacher_examples"`
 }
 
-type exercise struct {
-	ID          int      `json:"id"`
-	Type        string   `json:"type"`
-	Topic       string   `json:"topic"`
-	Difficulty  string   `json:"difficulty"`
-	Question    string   `json:"question"`
-	Options     []string `json:"options,omitempty"`
-	Answer      string   `json:"answer"`
-	Explanation string   `json:"explanation"`
-}
-
 type Lesson struct {
-	Title     string     `json:"title"`
-	Overview  string     `json:"overview"`
-	Sections  []Section  `json:"sections"`
-	Exercises []exercise `json:"exercises"`
+	Title     string              `json:"title"`
+	Overview  string              `json:"overview"`
+	Sections  []Section           `json:"sections"`
+	Exercises []exercise.Exercise `json:"exercises"`
 }
 
-func NewLesson(title string, overview string, sections []Section, exercises []exercise) (*Lesson, error) {
+func NewLesson(title string, overview string, sections []Section, exercises []exercise.Exercise) (*Lesson, error) {
 	if len(title) == 0 {
 		title = "Không có tiêu đề"
 	}
@@ -63,16 +55,4 @@ func NewLesson(title string, overview string, sections []Section, exercises []ex
 		Sections:  sections,
 		Exercises: exercises,
 	}, nil
-}
-func NewExecise(id int, topic string, difficulty string, question string, options []string, answer string, explanation string) exercise {
-	return exercise{
-		ID:          id,
-		Type:        "multiple-choice",
-		Topic:       topic,
-		Difficulty:  difficulty,
-		Question:    question,
-		Options:     options,
-		Answer:      answer,
-		Explanation: explanation,
-	}
 }

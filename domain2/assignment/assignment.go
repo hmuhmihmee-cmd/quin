@@ -1,225 +1,180 @@
 package assignment
 
 import (
-	"meet-attendance-clean/domain2/lesson"
-	"time"
-	"uuid"
+	"fmt"
+	exercise "meet-attendance-clean/domain2/excercise"
+	"meet-attendance-clean/domain2/mistake"
 )
 
-type AssigmentType string
+type Answer[E exercise.Exercise] interface {
+	IsValid(ex E) (bool, string)
+}
 
-const (
-	AssigmentTypeNormal       AssigmentType = "Normal"
-	AssignmentTypeRemediation AssigmentType = "Remediation"
-)
+type MCQAnswer struct {
+	SelectedOption string
+	WorkingText    string
+	WorkingData    [][]byte
+}
+
+func (a MCQAnswer) IsValid(ex exercise.MultipleChoiceExercise) (bool, string) {
+	if a.SelectedOption == "" {
+		return false, "Chưa chọn đáp án trắc nghiệm"
+	}
+	for _, option := range ex.Options() {
+		if option == a.SelectedOption {
+			return true, ""
+		}
+	}
+	return false, "Đáp án không hợp lệ"
+}
+
+type EssayAnswer struct {
+	Text string
+	Data [][]byte
+}
+
+func (a EssayAnswer) IsValid(ex exercise.EssayExercise) (bool, string) {
+	return true, ""
+}
+
+var _ Answer[exercise.EssayExercise] = &EssayAnswer{}
+var _ Answer[exercise.MultipleChoiceExercise] = &MCQAnswer{}
 
 type ItemStatus string
-
-const (
-	ItemStatusPending ItemStatus = "Pending" // Chưa chấm
-	ItemStatusSkipped ItemStatus = "Skipped" // Bỏ trống hoàn toàn
-	ItemStatusInvalid ItemStatus = "Invalid" // Khoanh sai quy cách
-	ItemStatusGraded  ItemStatus = "Graded"  // Đã có điểm & nhận xét
-)
-
-type Answer interface {
-	ItemID() uuid.UUID
-	IsEmpty() bool
-	IsValid() (bool, string)
-	Text() string
-	Data() [][]byte
-	Type() lesson.ExerciseType
+type GradeItem[E exercise.Exercise] interface {
+	Comment() string
 }
-type baseAnswer struct {
-	itemID uuid.UUID
-	text   string
-	data   [][]byte
+type SubEssayGrade struct {
+	Label     string
+	IsCorrect bool
+	Comment   string
+}
+type EssayGrade struct {
+	SubItems []SubEssayGrade
 }
 
-func (a *baseAnswer) ItemID() uuid.UUID {
-	return a.itemID
-}
-
-type MCAnswer struct {
-	baseAnswer
-	selectedOptions []string
-}
-
-func (a *MCAnswer) IsValid() (bool, string) {
-	if len(a.selectedOptions) == 1 {
-		return true, ""
-	} else {
-		return false, "Chỉ được chọn 1 đáp án"
+func (e *EssayGrade) Comment() string {
+	totalComment := ""
+	for _, sub := range e.SubItems {
+		totalComment += "\n" + sub.Comment
 	}
-}
-func (a *MCAnswer) Type() lesson.ExerciseType {
-	return lesson.ExerciseTypeMultipleChoice
+	return totalComment
 }
 
-type ESSAnswer struct {
-	baseAnswer
+type MCQGrade struct {
+	SelectedOption string
+	comment        string
 }
 
-func (a *ESSAnswer) IsValid() (bool, string) {
-	return a.baseAnswer.IsValid(), ""
-}
-func (a *ESSAnswer) Type() lesson.ExerciseType {
-	return lesson.ExerciseTypeEssay
-}
-func (a *baseAnswer) IsEmpty() bool {
-	return a.text == "" && len(a.data) == 0
-}
-func (a *baseAnswer) Text() string {
-	return a.text
-}
-func (a *baseAnswer) Data() [][]byte {
-	return a.data
+func (e *MCQGrade) Comment() string {
+	return e.comment
 }
 
-func (a *baseAnswer) IsValid() bool {
-	return a.text != "" || len(a.data) > 0
+type AssignmentItem[E exercise.Exercise, A Answer[E], G GradeItem[E]] interface {
+	Status() ItemStatus
+	OutputResult() string
+	Comment() string
+	ApplyGrade(GradeItem G) []mistake.Mistake
 }
-func NewMCAnswer(text string, data [][]byte, selectedOptions []string) *MCAnswer {
-	return &MCAnswer{
-		text:            text,
-		data:            data,
-		selectedOptions: selectedOptions,
+type subItem struct {
+	label      string
+	isSelected bool
+	isCorrect  bool
+	comment    string
+}
+type EssayAssigmentItem struct {
+	exercise exercise.EssayExercise
+	answer   *EssayAnswer
+	subItems []subItem
+}
+
+func (e *EssayAssigmentItem) ListSelectedSubItem() []string {
+	var selected []string
+	for _, sub := range e.subItems {
+		if sub.isSelected {
+			selected = append(selected, sub.label)
+		}
 	}
+	return selected
 }
-func NewESSAnswer(text string, data [][]byte) *ESSAnswer {
-	return &ESSAnswer{
-		text: text,
-		data: data,
+func (e *EssayAssigmentItem) ListSubItem() []string {
+	var labels []string
+	for _, sub := range e.subItems {
+		labels = append(labels, sub.label)
 	}
+	return labels
 }
-
-type ExerciseSnapshot struct {
-}
-type AssigmentItem struct {
-	id              uuid.UUID
-	exercise        lesson.Exercise
-	answer          Answer
-	numSubCorrect   int
-	numSubCompleted int
-	status          ItemStatus
-	comment         string
-}
-type Assignment struct {
-	id         uuid.UUID
-	studentID  uuid.UUID
-	title      string
-	typ        AssigmentType
-	assignedAt time.Time
-	items      []AssigmentItem
-	status     ItemStatus
-}
-type GradeItem struct {
-	itemID          uuid.UUID
-	exercise        lesson.Exercise
-	answer          Answer
-	numSubCorrect   int
-	numSubCompleted int
-	comment         string
-	status          ItemStatus
-}
-
-func NewAssignment(id uuid.UUID, studentID uuid.UUID, title string, typ AssigmentType, assignedAt time.Time, items []AssigmentItem, status ItemStatus) *Assignment {
-	return &Assignment{
-		id:         id,
-		studentID:  studentID,
-		title:      title,
-		typ:        typ,
-		assignedAt: assignedAt,
-		items:      items,
-		status:     status,
+func (e *EssayAssigmentItem) OuputResult() string {
+	if e.answer == nil {
+		return "Chưa làm bài tự luận"
 	}
+	isValid, rs := e.answer.IsValid(e.exercise)
+	if !isValid {
+		return rs
+	}
+	correct := 0
+	selected := 0
+	for _, sub := range e.subItems {
+		if sub.isCorrect {
+			correct++
+		}
+		if sub.isSelected {
+			selected++
+		}
+	}
+	return fmt.Sprintf("Đúng: %d/%d ý", correct, selected)
 }
-func (a *Assignment) AddAnwsers(answers []Answer) {
-	for i := 0; i < len(a.items); i++ {
-		item := &a.items[i]
-		for j := 0; j < len(answers); j++ {
-			if item.id == answers[j].ItemID() {
-				if item.exercise.Type() != answers[j].Type() {
-					item.comment = "Câu trả lời không đúng định dạng"
+func (e *EssayAssigmentItem) ApplyGrade(grade EssayGrade) {
+	for i := 0; i < len(e.subItems); i++ {
+		sub := &e.subItems[i]
+		if sub.isSelected {
+			for _, subGrade := range grade.SubItems {
+				if !sub.isSelected {
 					continue
 				}
-				item.answer = answers[j]
-			}
-		}
-	}
-}
-func (a *Assignment) ListItem(ids []uuid.UUID) []GradeItem {
-	items := make([]GradeItem, 0, 10)
-	for _, item := range a.items {
-		isValid, _ := item.answer.IsValid()
-		if !item.answer.IsEmpty() && isValid {
-			check := false
-			for _, id := range ids {
-				if id == item.id {
-					check = true
-					break
+				if subGrade.Label == sub.label {
+					sub.comment = subGrade.Comment
+					sub.isCorrect = subGrade.IsCorrect
 				}
 			}
-			if !check {
-				continue
-			}
-			gradeItem := GradeItem{
-				itemID:   item.id,
-				exercise: item.exercise,
-				answer:   item.answer,
-			}
-			items = append(items, gradeItem)
 		}
 	}
-	return items
-}
-func (a *Assignment) ApplyGrade(items []GradeItem) {
-	for i := 0; i < len(a.items); i++ {
-		item := &a.items[i]
-		for j := 0; j < len(items); j++ {
-			if items[j].itemID == item.id {
-				item.status = items[j].status
-				item.comment = items[j].comment
-				item.numSubCompleted = items[j].numSubCompleted
-				item.numSubCorrect = items[j].numSubCorrect
-				break
-			}
-		}
-	}
-	for i := 0; i < len(a.items); i++ {
-		item := &a.items[i]
-		if item.answer.IsEmpty() {
-			item.comment = "Chưa hoàn thành"
-			continue
-		}
-		isValid, reason := item.answer.IsValid()
-		if !isValid {
-			item.comment = reason
-			continue
-		}
-	}
-}
-func (a *Assignment) ID() uuid.UUID {
-	return a.id
-}
-func (a *Assignment) StudentID() uuid.UUID {
-	return a.studentID
-}
-func (a *Assignment) Title() string {
-	return a.title
 }
 
-func (a *Assignment) Type() AssigmentType {
-	return a.typ
+type MCQAssignmentItem struct {
+	exercise  exercise.MultipleChoiceExercise
+	answer    *MCQAnswer
+	comment   string
+	isCorrect bool
 }
-func (a *Assignment) AssignedAt() time.Time {
-	return a.assignedAt
+
+func (e *MCQAssignmentItem) OuputResult() string {
+	if e.answer == nil {
+		return "Chưa chọn đáp án"
+	}
+	isValid, rs := e.answer.IsValid(e.exercise)
+	if !isValid {
+		return rs
+	}
+	if e.answer.SelectedOption == e.exercise.Answer() {
+		return "Đúng"
+	}
+	return "Sai"
 }
-func (a *Assignment) Items() []AssigmentItem {
-	copied := make([]AssigmentItem, len(a.items))
-	copy(copied, a.items)
-	return copied
-}
-func (a *Assignment) Status() ItemStatus {
-	return a.status
+func (e *MCQAssignmentItem) ApplyGrade(grade MCQGrade) {
+	if e.answer == nil {
+		return
+	}
+	if e.answer.SelectedOption == "" {
+		e.isCorrect = false
+		e.comment = "Chưa chọn đáp án"
+		return
+	}
+	if e.answer.SelectedOption != e.exercise.Answer() {
+		e.comment = grade.comment
+		e.isCorrect = false
+		return
+	}
+	e.isCorrect = true
+	e.comment = grade.comment
 }

@@ -1,4 +1,4 @@
-package lesson
+package exercise
 
 import (
 	"errors"
@@ -28,35 +28,35 @@ type exerciseBase struct {
 	prompt     string
 }
 
-func (e *exerciseBase) ID() uuid.UUID      { return e.id }
-func (e *exerciseBase) Topic() string      { return e.topic }
-func (e *exerciseBase) Difficulty() string { return e.difficulty }
-func (e *exerciseBase) Prompt() string     { return e.prompt }
+func (e exerciseBase) ID() uuid.UUID      { return e.id }
+func (e exerciseBase) Topic() string      { return e.topic }
+func (e exerciseBase) Difficulty() string { return e.difficulty }
+func (e exerciseBase) Prompt() string     { return e.prompt }
 
-type multipleChoiceExercise struct {
+type MultipleChoiceExercise struct {
 	exerciseBase
 	options  []string
 	answer   string
 	solution string
 }
 
-func (m *multipleChoiceExercise) Type() ExerciseType { return ExerciseTypeMultipleChoice }
-func (m *multipleChoiceExercise) Options() []string {
-	// Tạo một slice mới và copy dữ liệu sang, không trả về con trỏ mảng gốc
+func (m MultipleChoiceExercise) Type() ExerciseType { return ExerciseTypeMultipleChoice }
+func (m MultipleChoiceExercise) Options() []string {
 	copied := make([]string, len(m.options))
 	copy(copied, m.options)
 	return copied
 }
-func (m *multipleChoiceExercise) Answer() string   { return m.answer }
-func (m *multipleChoiceExercise) Solution() string { return m.solution }
+func (m MultipleChoiceExercise) Answer() string   { return m.answer }
+func (m MultipleChoiceExercise) Solution() string { return m.solution }
 
-type essayExercise struct {
+type EssayExercise struct {
 	exerciseBase
 	parts []EssayPart
 }
 
-func (e *essayExercise) Type() ExerciseType { return ExerciseTypeEssay }
-func (e *essayExercise) Parts() []EssayPart {
+func (e EssayExercise) Type() ExerciseType { return ExerciseTypeEssay }
+
+func (e EssayExercise) Parts() []EssayPart {
 	copied := make([]EssayPart, len(e.parts))
 	copy(copied, e.parts)
 	return copied
@@ -69,16 +69,16 @@ type EssayPart struct {
 	rubric   string
 }
 
-func (p *EssayPart) Label() string {
+func (p EssayPart) Label() string {
 	return p.label
 }
-func (p *EssayPart) Solution() string {
+func (p EssayPart) Solution() string {
 	return p.solution
 }
-func (p *EssayPart) Rubric() string {
+func (p EssayPart) Rubric() string {
 	return p.rubric
 }
-func (p *EssayPart) Question() string {
+func (p EssayPart) Question() string {
 	return p.question
 }
 
@@ -89,7 +89,7 @@ func NewMultipleChoiceExercise(
 	options []string,
 	answer string,
 	solution string,
-) (*multipleChoiceExercise, error) {
+) (*MultipleChoiceExercise, error) {
 
 	topic = strings.TrimSpace(topic)
 	if topic == "" {
@@ -128,7 +128,7 @@ func NewMultipleChoiceExercise(
 	}
 
 	// 5. Khởi tạo Entity an toàn 100%
-	return &multipleChoiceExercise{
+	return &MultipleChoiceExercise{
 		id:         uuid.New(),
 		topic:      topic,
 		difficulty: strings.TrimSpace(difficulty),
@@ -144,7 +144,7 @@ func NewEssayExercise(
 	difficulty string,
 	prompt string,
 	parts []EssayPart,
-) (*essayExercise, error) {
+) (*EssayExercise, error) {
 
 	topic = strings.TrimSpace(topic)
 	if topic == "" {
@@ -183,7 +183,7 @@ func NewEssayExercise(
 		}
 	}
 
-	return &essayExercise{
+	return &EssayExercise{
 		id:         uuid.New(),
 		topic:      topic,
 		difficulty: strings.TrimSpace(difficulty),
