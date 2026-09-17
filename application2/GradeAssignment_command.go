@@ -3,7 +3,9 @@ package application2
 import (
 	"context"
 	"errors"
+	"fmt"
 	"meet-attendance-clean/domain2/assignment"
+	"meet-attendance-clean/domain2/mistake"
 	"uuid"
 )
 
@@ -11,18 +13,20 @@ type AssignmentRepo interface {
 	GetByID(ctx context.Context, assignmentID uuid.UUID) (*assignment.Assignment, error)
 	Save(ctx context.Context, assignment *assignment.Assignment) error
 }
+
+type MistakeRepo interface {
+	SaveMistakes(ctx context.Context, studentID uuid.UUID, mistakes []mistake.Mistake) error
+}
+
 type WorkSpaceGateway interface {
 	FetchStudentSubmission(ctx context.Context, assignmentID uuid.UUID) (pageInk []byte, answers []assignment.Answer, err error)
-	PatchFeedback(ctx context.Context, assignmentID uuid.UUID, items []assignment.AssigmentItem) error
+	PatchFeedback(ctx context.Context, assignmentID uuid.UUID, items []assignment.AssignmentItem) error
 }
+
 type Grader interface {
-	Evaluate(ctx context.Context, gradeItems []assignment.GradeItem, pageInk []byte, prompt string, model string) ([]assignment.GradeItem, error)
+	Evaluate(ctx context.Context, gradeItems []assignment.EvaluationRequest, pageInk []byte, prompt string, model string) ([]assignment.EvaluationResult, error)
 }
-type GradeAssignmentUsecase struct {
-	assignmentRepo   AssignmentRepo
-	workspaceGateway WorkSpaceGateway
-	grader           Grader
-}
+
 type GradeAssignmentCommand struct {
 	AssignmentID uuid.UUID
 	ItemIDs      []uuid.UUID
@@ -30,30 +34,71 @@ type GradeAssignmentCommand struct {
 	Model        string
 }
 
+type GradeAssignmentUsecase struct {
+	assignmentRepo   AssignmentRepo
+	mistakeRepo      MistakeRepo
+	workspaceGateway WorkSpaceGateway
+	grader           Grader
+}
+
+func NewGradeAssignmentUsecase(
+	assignmentRepo AssignmentRepo,
+	mistakeRepo MistakeRepo,
+	workspaceGateway WorkSpaceGateway,
+	grader Grader,
+) *GradeAssignmentUsecase {
+	return &GradeAssignmentUsecase{
+		assignmentRepo:   assignmentRepo,
+		mistakeRepo:      mistakeRepo,
+		workspaceGateway: workspaceGateway,
+		grader:           grader,
+	}
+}
+
 func (g *GradeAssignmentUsecase) Grade(ctx context.Context, cmd GradeAssignmentCommand) error {
-	assignment, err := g.assignmentRepo.GetByID(ctx, cmd.AssignmentID)
+
+	a, err := g.assignmentRepo.GetByID(ctx, cmd.AssignmentID)
 	if err != nil {
-		return err
+		return fmt.Errorf("không thể tìm thấy bài tập: %w", err)
 	}
-	pageInk, answers, err := g.workspaceGateway.FetchStudentSubmission(ctx, assignment.ID())
+
+	pageInk, answers, err := g.workspaceGateway.FetchStudentSubmission(ctx, a.ID())
 	if err != nil {
-		return err
+		return fmt.Errorf("lỗi khi lấy bài làm của học sinh: %w", err)
 	}
-	assignment.AddAnwsers(answers)
-	validItems := assignment.ListItem(cmd.ItemIDs)
-	if len(validItems) == 0 {
-		return errors.New("Không có bài nào hợp lệ")
+
+	if err := a.AddAnswers(answers); err != nil {
+		return fmt.Errorf("dữ liệu bài làm không hợp lệ: %w", err)
 	}
-	evaluations, err := g.grader.Evaluate(ctx, validItems, pageInk, cmd.Prompt, cmd.Model)
+
+	gradeItemsToEvaluate := a.ListEvalReqs(cmd.ItemIDs)
+	if len(gradeItemsToEvaluate) == 0 {
+		return errors.New("không có câu hỏi nào hợp lệ để chấm")
+	}
+
+	evaluations, err := g.grader.Evaluate(ctx, gradeItemsToEvaluate, pageInk, cmd.Prompt, cmd.Model)
 	if err != nil {
-		return err
+		return fmt.Errorf("lỗi khi chấm bài qua AI Grader: %w", err)
 	}
-	assignment.ApplyGrade(evaluations)
-	if err := g.assignmentRepo.Save(ctx, assignment); err != nil {
-		return err
+
+	detectedMistakes, err := a.ApplyEvalResults(evaluations)
+	if err != nil {
+		return fmt.Errorf("lỗi khi áp dụng kết quả chấm điểm: %w", err)
 	}
-	if err := g.workspaceGateway.PatchFeedback(ctx, assignment.ID(), assignment.Items()); err != nil {
-		return err
+
+	if len(detectedMistakes) > 0 && g.mistakeRepo != nil {
+		if err := g.mistakeRepo.SaveMistakes(ctx, a.StudentID(), detectedMistakes); err != nil {
+			return fmt.Errorf("không thể lưu danh sách lỗi sai của học sinh: %w", err)
+		}
 	}
+
+	if err := g.assignmentRepo.Save(ctx, a); err != nil {
+		return fmt.Errorf("không thể lưu kết quả bài tập: %w", err)
+	}
+
+	if err := g.workspaceGateway.PatchFeedback(ctx, a.ID(), a.Items()); err != nil {
+		return fmt.Errorf("không thể đồng bộ nhận xét sang workspace: %w", err)
+	}
+
 	return nil
 }
