@@ -17,27 +17,40 @@ var (
 )
 
 type TeacherExample struct {
-	ExampleNum                 int    `json:"example_num"`
-	Problem                    string `json:"problem"`
-	TeacherSolution            string `json:"teacher_solution"`
-	StudentFriendlyExplanation string `json:"student_friendly_explanation"`
-	CommonMistake              string `json:"common_mistake,omitempty"`
+	ExampleNum                 int
+	Problem                    string
+	TeacherSolution            string
+	StudentFriendlyExplanation string
+	CommonMistake              string
 }
 
 type Section struct {
-	SectionTitle      string           `json:"section_title"`
-	TransitionIntro   string           `json:"transition_intro"`
-	DetailedContent   string           `json:"detailed_content"`
-	KeyTakeaway       string           `json:"key_takeaway"`
-	StudentClozeNotes []string         `json:"student_cloze_notes"`
-	TeacherExamples   []TeacherExample `json:"teacher_examples"`
+	SectionTitle      string
+	TransitionIntro   string
+	DetailedContent   string
+	KeyTakeaway       string
+	StudentClozeNotes []string
+	TeacherExamples   []TeacherExample
 }
 
 type Lesson struct {
-	Title     string              `json:"title"`
-	Overview  string              `json:"overview"`
-	Sections  []Section           `json:"sections"`
-	Exercises []exercise.Exercise `json:"exercises"`
+	title     string
+	overview  string
+	sections  []Section
+	exercises []exercise.Exercise
+}
+
+func (l *Lesson) Title() string {
+	return l.title
+}
+func (l *Lesson) Overview() string {
+	return l.overview
+}
+func (l *Lesson) Sections() []Section {
+	return l.sections
+}
+func (l *Lesson) Exercises() []exercise.Exercise {
+	return l.exercises
 }
 
 func NewLesson(title string, overview string, sections []Section, exercises []exercise.Exercise) (*Lesson, error) {
@@ -50,9 +63,9 @@ func NewLesson(title string, overview string, sections []Section, exercises []ex
 	}
 
 	return &Lesson{
-		Title:     title,
-		Overview:  overview,
-		Sections:  sections,
-		Exercises: exercises,
+		title:     title,
+		overview:  overview,
+		sections:  sections,
+		exercises: exercises,
 	}, nil
 }

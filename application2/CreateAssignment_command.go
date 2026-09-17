@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"meet-attendance-clean/domain2/lesson"
+	"time"
 	"uuid"
 )
 
@@ -19,8 +20,8 @@ type LessonGenerator interface {
 type GenerateLessonCommand struct {
 	Title    string
 	Model    string
-	Material lesson.StudyMaterial
 	Prompt   string
+	Material lesson.StudyMaterial
 }
 
 type GenerateLessonUsecase struct {
@@ -37,25 +38,27 @@ func (u *GenerateLessonUsecase) Create(ctx context.Context, cmd GenerateLessonCo
 		return uuid.Nil(), errors.New("material không được để trống")
 	}
 
-	draft := lesson.NewLessonDraft(cmd.Title, cmd.Model, lesson.LessonDraftProcessing)
+	draft := lesson.NewLessonDraft(cmd.Title, cmd.Model, cmd.Prompt, lesson.LessonDraftProcessing)
 
 	if err := u.repo.Save(ctx, draft); err != nil {
 		return uuid.Nil(), fmt.Errorf("không thể lưu Lesson Draft: %w", err)
 	}
 
-	go u.processGenerationInBackground(draft.ID, cmd)
+	go u.processGenerationInBackground(draft, cmd)
 
-	return draft.ID, nil
+	return draft.ID(), nil
 }
 
-func (u *GenerateLessonUsecase) processGenerationInBackground(draftID uuid.UUID, cmd GenerateLessonCommand) {
+func (u *GenerateLessonUsecase) processGenerationInBackground(draft *lesson.LessonDraft, cmd GenerateLessonCommand) {
 
-	bgCtx := context.Background()
+	bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
 
 	var err error
 	defer func() {
 		if err != nil {
-			u.markDraftAsFailed(bgCtx, draftID, err)
+			draft.ApplyError(err)
+			_ = u.repo.Save(bgCtx, draft)
 		}
 	}()
 
@@ -65,17 +68,6 @@ func (u *GenerateLessonUsecase) processGenerationInBackground(draftID uuid.UUID,
 		return
 	}
 
-	u.markDraftAsCompleted(bgCtx, draftID, *generatedLesson)
-}
-
-func (u *GenerateLessonUsecase) markDraftAsFailed(ctx context.Context, draftID uuid.UUID, reason error) {
-	draft := &lesson.LessonDraft{ID: draftID}
-	draft.ApplyError(reason)
-	_ = u.repo.Save(ctx, draft)
-}
-
-func (u *GenerateLessonUsecase) markDraftAsCompleted(ctx context.Context, draftID uuid.UUID, result lesson.Lesson) {
-	draft := &lesson.LessonDraft{ID: draftID}
-	draft.ApplyLesson(result)
-	_ = u.repo.Save(ctx, draft)
+	draft.ApplyLesson(*generatedLesson)
+	err = u.repo.Save(bgCtx, draft)
 }

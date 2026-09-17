@@ -28,8 +28,8 @@ func (g *MistakeGraph) RegisterMistake(parentID *uuid.UUID, topic, reason string
 
 	// Trường hợp 1: Lỗi gốc (Tầng 0)
 	if parentID == nil {
-		g.roots = append(g.roots, newNode)
-		return newNode, nil
+		g.roots = append(g.roots, &newNode)
+		return &newNode, nil
 	}
 
 	// Trường hợp 2: Lỗi con đẻ ra từ lỗi cha
@@ -39,8 +39,8 @@ func (g *MistakeGraph) RegisterMistake(parentID *uuid.UUID, topic, reason string
 	}
 
 	// Nhét trực tiếp vào mảng con của cha (Cấu trúc cây tự nhiên)
-	parentNode.children = append(parentNode.children, newNode)
-	return newNode, nil
+	parentNode.children = append(parentNode.children, &newNode)
+	return &newNode, nil
 }
 
 // Hành vi 2: Giải quyết một lỗi

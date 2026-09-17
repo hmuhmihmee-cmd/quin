@@ -22,12 +22,30 @@ func newAttendanceRecord(name string, firstJoinedAt time.Time, lastLeaveAt time.
 		durationMin:   durationMin,
 	}
 }
+func (a *AttendanceRecord) StudentName() string {
+	return a.studentName
+}
+func (a *AttendanceRecord) FirstJoinedAt() time.Time {
+	return a.firstJoinedAt
+}
+func (a *AttendanceRecord) LastLeaveAt() time.Time {
+	return a.lastLeaveAt
+}
+func (a *AttendanceRecord) DurationMin() int {
+	return a.durationMin
+}
+
+type SessionPlatformRef struct {
+	platform    string // "GOOGLE_MEET", "ZOOM", "OFFLINE"
+	sessionCode string // Mã phòng học ngoài (abc-xyz hoặc Zoom ID)
+}
 
 type ClassSession struct {
-	id         uuid.UUID
-	startTime  time.Time
-	endTime    time.Time
-	attendance []AttendanceRecord
+	id          uuid.UUID
+	startAt     time.Time
+	endAt       time.Time
+	attendance  []AttendanceRecord
+	platformRef SessionPlatformRef
 }
 
 func NewClassSession(startTime time.Time, endTime time.Time) (*ClassSession, error) {
@@ -36,8 +54,8 @@ func NewClassSession(startTime time.Time, endTime time.Time) (*ClassSession, err
 	}
 	return &ClassSession{
 		id:         uuid.New(),
-		startTime:  startTime,
-		endTime:    endTime,
+		startAt:    startTime,
+		endAt:      endTime,
 		attendance: make([]AttendanceRecord, 0),
 	}, nil
 }
@@ -75,15 +93,15 @@ func ReconstituteClassSession(
 ) *ClassSession {
 	return &ClassSession{
 		id:         id, // 👈 Nhận ID đã có từ SQLite
-		startTime:  startTime,
-		endTime:    endTime,
+		startAt:    startTime,
+		endAt:      endTime,
 		attendance: attendance,
 	}
 }
 
 func (s *ClassSession) ID() uuid.UUID        { return s.id }
-func (s *ClassSession) StartTime() time.Time { return s.startTime }
-func (s *ClassSession) EndTime() time.Time   { return s.endTime }
+func (s *ClassSession) StartTime() time.Time { return s.startAt }
+func (s *ClassSession) EndTime() time.Time   { return s.endAt }
 func (s *ClassSession) Attendance() []AttendanceRecord {
 	copied := make([]AttendanceRecord, len(s.attendance))
 	copy(copied, s.attendance)

@@ -25,6 +25,30 @@ type Mistake struct {
 	status           MistakeStatus
 }
 
+func (m *Mistake) ID() uuid.UUID {
+	return m.id
+}
+func (m *Mistake) Topic() string {
+	return m.topic
+}
+func (m *Mistake) Reason() string {
+	return m.reason
+}
+func (m *Mistake) AssignmentItemID() uuid.UUID {
+	return m.assignmentItemID
+}
+func (m *Mistake) Children() []*Mistake {
+	return m.children
+}
+func (m *Mistake) CreatedAt() time.Time {
+	return m.createdAt
+}
+func (m *Mistake) ResolvedAt() *time.Time {
+	return m.resolvedAt
+}
+func (m *Mistake) Status() MistakeStatus {
+	return m.status
+}
 func NewMistake(topic string, reason string, assignmentItemID uuid.UUID) Mistake {
 	return Mistake{
 		id:               uuid.New(),

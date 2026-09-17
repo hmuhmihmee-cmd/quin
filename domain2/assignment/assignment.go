@@ -1,6 +1,8 @@
 package assignment
 
 import (
+	"errors"
+	"meet-attendance-clean/domain2/lesson"
 	"meet-attendance-clean/domain2/mistake"
 	"uuid"
 )
@@ -29,6 +31,24 @@ type Assignment struct {
 	status    AssignmentStatus
 }
 
+func NewAssignment(studentID uuid.UUID, title string, typ AssignmentType, items ...AssignmentItem) (*Assignment, error) {
+	if studentID == uuid.Nil() {
+		return nil, errors.New("student ID không được định nghĩa")
+	}
+	if title == "" {
+		return nil, errors.New("tiêu đề không được định nghĩa")
+	}
+	if len(items) == 0 {
+		return nil, errors.New("không có item nào được định nghĩa")
+	}
+	return &Assignment{
+		id:        uuid.New(),
+		studentID: studentID,
+		title:     title,
+		typ:       typ,
+		items:     items,
+	}, nil
+}
 func (a *Assignment) ID() uuid.UUID { return a.id }
 func (a *Assignment) StudentID() uuid.UUID {
 	return a.studentID
@@ -91,4 +111,24 @@ func (a *Assignment) ListEvalReqs(itemIDs []uuid.UUID) []EvaluationRequest {
 		}
 	}
 	return evalReqs
+}
+
+// NewAssignmentFromLesson là Factory tự động rã Lesson thành các AssignmentItem
+func NewAssignmentFromLesson(
+	studentID uuid.UUID,
+	title string,
+	lsn lesson.Lesson,
+) (*Assignment, error) {
+
+	// Tự động map từ exercise.Exercise sang AssignmentItem wrapper
+	items := make([]AssignmentItem, 0, len(lsn.Exercises()))
+	for _, ex := range lsn.Exercises() {
+		item, err := NewAssignmentItem(ex)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+
+	return NewAssignment(studentID, title, AssignmentTypeNormal, items...)
 }
