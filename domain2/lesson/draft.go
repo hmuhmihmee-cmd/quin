@@ -23,6 +23,15 @@ type LessonDraft struct {
 	UpdatedAt *time.Time
 }
 
+func NewLessonDraft(title string, model string, status LessonDraftStatus) *LessonDraft {
+	return &LessonDraft{
+		ID:        uuid.New(),
+		Title:     title,
+		Model:     model,
+		Status:    status,
+		CreatedAt: time.Now().UTC(),
+	}
+}
 func (d *LessonDraft) ApplyLesson(lesson Lesson) {
 	d.Title = lesson.Title
 	d.Status = LessonDraftCompleted
