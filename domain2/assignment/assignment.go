@@ -96,6 +96,8 @@ func (a *Assignment) ApplyEvalResults(evalResults []EvaluationResult) ([]mistake
 			mistakes = append(mistakes, newMistakes...)
 		}
 	}
+	a.status = AssignmentStatusGraded
+
 	return mistakes, nil
 }
 func (a *Assignment) ListEvalReqs(itemIDs []uuid.UUID) []EvaluationRequest {
@@ -111,6 +113,14 @@ func (a *Assignment) ListEvalReqs(itemIDs []uuid.UUID) []EvaluationRequest {
 		}
 	}
 	return evalReqs
+}
+func (a *Assignment) IsCorrect() bool {
+	for _, item := range a.items {
+		if !item.IsCorrect() {
+			return false
+		}
+	}
+	return true
 }
 
 // NewAssignmentFromLesson là Factory tự động rã Lesson thành các AssignmentItem

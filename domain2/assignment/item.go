@@ -26,6 +26,7 @@ type AssignmentItem interface {
 	AddAnswer(raw Answer) error
 	GenerateEvalRequest() EvaluationRequest
 	ApplyEvalResult(res EvaluationResult) ([]mistake.Mistake, error)
+	IsCorrect() bool
 }
 
 type TypedAssignmentItem[E exercise.Exercise, A Answer, Req EvaluationRequest, Res EvaluationResult] interface {
@@ -36,6 +37,7 @@ type TypedAssignmentItem[E exercise.Exercise, A Answer, Req EvaluationRequest, R
 	AddAnswer(raw A)
 	GenerateEvalRequest() Req
 	ApplyEvalResult(res Res) []mistake.Mistake
+	IsCorrect() bool
 }
 type wrapperAssignmentItem[E exercise.Exercise, A Answer, Req EvaluationRequest, Res EvaluationResult, T TypedAssignmentItem[E, A, Req, Res]] struct {
 	inner T
@@ -77,6 +79,9 @@ func (w *wrapperAssignmentItem[E, A, Req, Res, T]) ApplyEvalResult(res Evaluatio
 		return nil, fmt.Errorf("đáp án thuộc về item khác: %s", typed.ItemID())
 	}
 	return w.inner.ApplyEvalResult(typed), nil
+}
+func (w *wrapperAssignmentItem[E, A, Req, Res, T]) IsCorrect() bool {
+	return w.inner.IsCorrect()
 }
 
 // Tạo một file factory.go hoặc để chung trong assignment.go

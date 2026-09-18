@@ -114,6 +114,15 @@ func (e *EssayAssigmentItem) ListSubItem() []string {
 	}
 	return labels
 }
+func (e *EssayAssigmentItem) IsCorrect() bool {
+	isCorrect := true
+	for _, sub := range e.subItems {
+		if sub.isSelected && !sub.isCorrect {
+			isCorrect = false
+		}
+	}
+	return isCorrect
+}
 func (e *EssayAssigmentItem) OutputResult() string {
 	if e.answer == nil {
 		return "Chưa làm bài tự luận"

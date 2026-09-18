@@ -20,6 +20,7 @@ type RemediationAIGenerator interface {
 }
 type RemediationTaskRepo interface {
 	Save(ctx context.Context, task *mistake.RemediationTask) error
+	GetByAssinmentID(ctx context.Context, assignmentID uuid.UUID) (*mistake.RemediationTask, error)
 }
 
 type GenerateRemediationCommand struct {

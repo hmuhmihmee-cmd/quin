@@ -119,6 +119,9 @@ func (e *MCQAssignmentItem) ID() uuid.UUID { return e.id }
 func (e *MCQAssignmentItem) Comment() string {
 	return e.comment
 }
+func (e *MCQAssignmentItem) IsCorrect() bool {
+	return e.isCorrect
+}
 func NewMCQAnswer(itemID uuid.UUID, selectedOption string, text string, data [][]byte) (*MCQAnswer, error) {
 	if itemID == uuid.Nil() {
 		return nil, errors.New("itemID không hợp lệ")

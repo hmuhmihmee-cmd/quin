@@ -3,7 +3,6 @@ package student
 import (
 	"errors"
 	"fmt"
-	"meet-attendance-clean/domain2/lesson"
 	"strings"
 	"time"
 	"uuid"
@@ -64,43 +63,21 @@ func NewStudent(name, class string, cycleStartDay int) (*Student, error) {
 		createdAt:     time.Now().UTC(),
 	}, nil
 }
-
-type TargetLocation struct {
-	WorkspaceID   *uuid.UUID
-	WorkspaceName *string
-	ChapterName   string
-}
-
-// GetPublishTarget tự động quyết định xem dùng ID cũ hay tạo Tên mới
-func (s *Student) GetPublishTarget(audience lesson.Audience, chapterName string) TargetLocation {
-	target := TargetLocation{
-		ChapterName: chapterName,
+func NewStudentFromDiscoveredClass(name string) (*Student, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "Lớp chưa đặt tên"
 	}
 
-	if audience == lesson.AudienceStudent {
-		if s.studentWorkspaceID != uuid.Nil() {
-			target.WorkspaceID = &s.studentWorkspaceID
-		} else {
-			name := fmt.Sprintf("%s_HS", s.name) // Logic quy tắc đặt tên nằm ở đây!
-			target.WorkspaceName = &name
-		}
-	} else {
-		if s.teacherWorkspaceID != uuid.Nil() {
-			target.WorkspaceID = &s.teacherWorkspaceID
-		} else {
-			name := fmt.Sprintf("%s_GV", s.name)
-			target.WorkspaceName = &name
-		}
-	}
-	return target
-}
+	// 👉 ĐÂY LÀ QUY TẮC NGHIỆP VỤ: Đặt tên mặc định và chu kỳ học phí
+	defaultStudentName := fmt.Sprintf("Học sinh mới - %s", name)
+	defaultCycleDay := 1 // Ngày 1 đầu tháng tính học phí
 
-// SyncWorkspaceIDs lưu lại ID mới nếu OneNote vừa tạo vở xong
-func (s *Student) SyncWorkspaceIDs(studentWsID, teacherWsID uuid.UUID) {
-	if s.studentWorkspaceID == uuid.Nil() && studentWsID != uuid.Nil() {
-		s.studentWorkspaceID = studentWsID
-	}
-	if s.teacherWorkspaceID == uuid.Nil() && teacherWsID != uuid.Nil() {
-		s.teacherWorkspaceID = teacherWsID
-	}
+	return &Student{
+		id:            uuid.New(),
+		name:          defaultStudentName,
+		class:         name,
+		cycleStartDay: defaultCycleDay,
+		createdAt:     time.Now().UTC(),
+	}, nil
 }

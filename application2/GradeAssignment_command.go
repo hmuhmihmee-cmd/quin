@@ -37,6 +37,8 @@ type GradeAssignmentCommand struct {
 type GradeAssignmentUsecase struct {
 	assignmentRepo   AssignmentRepo
 	mistakeRepo      MistakeRepo
+	remediationRepo  RemediationTaskRepo
+	misktakeGrapRepo MistakeGraphRepo
 	workspaceGateway WorkSpaceGateway
 	grader           Grader
 }
@@ -44,6 +46,8 @@ type GradeAssignmentUsecase struct {
 func NewGradeAssignmentUsecase(
 	assignmentRepo AssignmentRepo,
 	mistakeRepo MistakeRepo,
+	remediationRepo RemediationTaskRepo,
+	misktakeGrapRepo MistakeGraphRepo,
 	workspaceGateway WorkSpaceGateway,
 	grader Grader,
 ) *GradeAssignmentUsecase {
@@ -99,6 +103,40 @@ func (g *GradeAssignmentUsecase) Grade(ctx context.Context, cmd GradeAssignmentC
 	if err := g.workspaceGateway.PatchFeedback(ctx, a.ID(), a.Items()); err != nil {
 		return fmt.Errorf("không thể đồng bộ nhận xét sang workspace: %w", err)
 	}
+	if a.IsCorrect() {
+		err := g.resolveRemediationIfAssigned(ctx, a.ID())
+		fmt.Printf("Cảnh báo: Không thể hoàn tất task chữa lỗi cho bài %s: %v\n", a.ID(), err)
+	}
+	return nil
+}
+func (g *GradeAssignmentUsecase) resolveRemediationIfAssigned(ctx context.Context, assignmentID uuid.UUID) error {
 
+	task, err := g.remediationRepo.GetByAssinmentID(ctx, assignmentID)
+	if err != nil {
+		return err
+	}
+	if task == nil {
+		return nil
+	}
+	if task.Status() == mistake.RemediationStatusResolved {
+		return nil
+	}
+	graph, err := g.misktakeGrapRepo.GetByStudentID(ctx, task.StudentID())
+	if err != nil {
+		return fmt.Errorf("không tìm thấy cây lỗi của học sinh: %w", err)
+	}
+
+	if err := graph.Resolve(task.MistakeID()); err != nil {
+		return fmt.Errorf("lỗ hổng chưa đủ điều kiện đóng: %w", err)
+	}
+
+	task.MarkAsCompleted()
+
+	if err := g.remediationRepo.Save(ctx, task); err != nil {
+		return fmt.Errorf("không thể lưu task: %w", err)
+	}
+	if err := g.misktakeGrapRepo.Save(ctx, graph); err != nil {
+		return fmt.Errorf("không thể lưu cây lỗi: %w", err)
+	}
 	return nil
 }
