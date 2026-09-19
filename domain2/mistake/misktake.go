@@ -57,18 +57,22 @@ func NewMistake(topic string, reason string, assignmentItemID uuid.UUID) Mistake
 		assignmentItemID: assignmentItemID,
 		children:         make([]*Mistake, 0),
 		createdAt:        time.Now().UTC(),
+		status:           MistakeStatusDetected,
 	}
 }
-func (m *Mistake) CanReslove() bool {
+func (m *Mistake) canReslove() bool {
+	if m.status != MistakeStatusResolved {
+		return false
+	}
 	for _, child := range m.children {
-		if child.status == MistakeStatusResolved || !child.CanReslove() {
+		if !child.canReslove() {
 			return false
 		}
 	}
 	return true
 }
 func (m *Mistake) Reslove() error {
-	if !m.CanReslove() {
+	if !m.canReslove() {
 		return errors.New("không thể đóng lỗ hổng này vì các lỗ hổng tầng sâu hơn bên dưới chưa được giải quyết triệt để")
 	}
 	m.status = MistakeStatusResolved

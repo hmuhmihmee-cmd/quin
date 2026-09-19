@@ -15,8 +15,13 @@ type Answer interface {
 type EvaluationRequest interface {
 	ItemID() uuid.UUID
 }
+type DetectedMistake struct {
+	topic  string
+	reason string
+}
 type EvaluationResult interface {
 	ItemID() uuid.UUID
+	DetectedMistakes() []DetectedMistake
 }
 type AssignmentItem interface {
 	ID() uuid.UUID

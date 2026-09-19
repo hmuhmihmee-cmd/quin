@@ -45,8 +45,9 @@ type SubEssayRes struct {
 	comment   string
 }
 type EssayEvalRes struct {
-	itemID   uuid.UUID
-	subItems []SubEssayRes
+	itemID           uuid.UUID
+	subItems         []SubEssayRes
+	detectedMistakes []DetectedMistake
 }
 
 func NewSubEssayRes(label string, isCorrect bool, comment string) SubEssayRes {
@@ -64,7 +65,9 @@ func NewEssayEvalRes(itemID uuid.UUID, subItems []SubEssayRes) EssayEvalRes {
 }
 
 func (e EssayEvalRes) ItemID() uuid.UUID { return e.itemID }
-
+func (e EssayEvalRes) DetectedMistakes() []DetectedMistake {
+	return e.detectedMistakes
+}
 func (e EssayEvalRes) Comment() string {
 	totalComment := ""
 	for _, sub := range e.subItems {
@@ -107,13 +110,6 @@ func (e *EssayAssigmentItem) ListSelectedSubItem() []string {
 	}
 	return selected
 }
-func (e *EssayAssigmentItem) ListSubItem() []string {
-	var labels []string
-	for _, sub := range e.subItems {
-		labels = append(labels, sub.label)
-	}
-	return labels
-}
 func (e *EssayAssigmentItem) IsCorrect() bool {
 	isCorrect := true
 	for _, sub := range e.subItems {
@@ -144,21 +140,23 @@ func (e *EssayAssigmentItem) OutputResult() string {
 	return fmt.Sprintf("Đúng: %d/%d ý", correct, selected)
 }
 func (e *EssayAssigmentItem) ApplyEvalResult(res EssayEvalRes) []mistake.Mistake {
+	var mistakes []mistake.Mistake
+	for _, sub := range res.DetectedMistakes() {
+		mistakes = append(mistakes, mistake.NewMistake(sub.topic, sub.reason, e.id))
+	}
 	for i := 0; i < len(e.subItems); i++ {
 		sub := &e.subItems[i]
 		if sub.isSelected {
 			for _, subGrade := range res.subItems {
-				if !sub.isSelected {
-					continue
-				}
 				if subGrade.label == sub.label {
 					sub.comment = subGrade.comment
 					sub.isCorrect = subGrade.isCorrect
+
 				}
 			}
 		}
 	}
-	return nil
+	return mistakes
 }
 func (e *EssayAssigmentItem) GenerateEvalRequest() EssayEvalReq {
 	var subItems []SubEssayReq
@@ -196,7 +194,13 @@ func (e *EssayAssigmentItem) AddAnswer(anwser EssayAnswer) {
 	e.answer = &anwser
 }
 func (e *EssayAssigmentItem) Comment() string {
-	return ""
+	var finalComment string
+	for _, sub := range e.subItems {
+		if sub.isSelected {
+			finalComment += sub.comment + "\n"
+		}
+	}
+	return finalComment
 }
 
 var _ TypedAssignmentItem[exercise.EssayExercise, EssayAnswer, EssayEvalReq, EssayEvalRes] = &EssayAssigmentItem{}

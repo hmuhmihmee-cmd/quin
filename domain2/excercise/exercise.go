@@ -35,14 +35,33 @@ func (e exerciseBase) Prompt() string     { return e.prompt }
 
 type MultipleChoiceExercise struct {
 	exerciseBase
-	options  []string
+	options  []MCOption
 	answer   string
 	solution string
 }
 
 func (m MultipleChoiceExercise) Type() ExerciseType { return ExerciseTypeMultipleChoice }
-func (m MultipleChoiceExercise) Options() []string {
-	copied := make([]string, len(m.options))
+
+type MCOption struct {
+	label   string
+	content string
+}
+
+func NewMCOption(label string, content string) MCOption {
+	return MCOption{
+		label:   label,
+		content: content,
+	}
+}
+func (m MCOption) Label() string {
+	return m.label
+}
+func (m MCOption) Content() string {
+	return m.content
+}
+
+func (m MultipleChoiceExercise) Options() []MCOption {
+	copied := make([]MCOption, len(m.options))
 	copy(copied, m.options)
 	return copied
 }
@@ -86,7 +105,7 @@ func NewMultipleChoiceExercise(
 	topic string,
 	difficulty string,
 	prompt string,
-	options []string,
+	options []MCOption,
 	answer string,
 	solution string,
 ) (*MultipleChoiceExercise, error) {

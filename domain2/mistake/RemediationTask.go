@@ -9,7 +9,7 @@ import (
 type RemediationStatus string
 
 const (
-	RemediationStatusDeteted    RemediationStatus = "deteted"
+	RemediationStatusPending    RemediationStatus = "pending"
 	RemediationStatusInProgress RemediationStatus = "in_progress"
 	RemediationStatusResolved   RemediationStatus = "resolved"
 )
@@ -53,6 +53,8 @@ func NewRemediationTask(mistakeID uuid.UUID, studentID uuid.UUID, draft lesson.L
 		mistakeID:   mistakeID,
 		studentID:   studentID,
 		LessonDraft: draft,
+
+		status: RemediationStatusPending,
 	}, nil
 }
 

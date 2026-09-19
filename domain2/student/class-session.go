@@ -35,17 +35,11 @@ func (a *AttendanceRecord) DurationMin() int {
 	return a.durationMin
 }
 
-type SessionPlatformRef struct {
-	platform    string // "GOOGLE_MEET", "ZOOM", "OFFLINE"
-	sessionCode string // Mã phòng học ngoài (abc-xyz hoặc Zoom ID)
-}
-
 type ClassSession struct {
-	id          uuid.UUID
-	startAt     time.Time
-	endAt       time.Time
-	attendance  []AttendanceRecord
-	platformRef SessionPlatformRef
+	id         uuid.UUID
+	startAt    time.Time
+	endAt      time.Time
+	attendance []AttendanceRecord
 }
 
 func NewClassSession(startTime time.Time, endTime time.Time) (*ClassSession, error) {

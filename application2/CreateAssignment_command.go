@@ -14,7 +14,7 @@ type LessonDraftRepo interface {
 }
 
 type LessonGenerator interface {
-	Generate(ctx context.Context, prompt string) (*lesson.Lesson, error)
+	Generate(ctx context.Context, material lesson.StudyMaterial, model string, prompt string) (*lesson.Lesson, error)
 }
 
 type GenerateLessonCommand struct {
@@ -62,7 +62,7 @@ func (u *GenerateLessonUsecase) processGenerationInBackground(draft *lesson.Less
 		}
 	}()
 
-	generatedLesson, err := u.generator.Generate(bgCtx, cmd.Prompt)
+	generatedLesson, err := u.generator.Generate(bgCtx, cmd.Material, cmd.Model, cmd.Prompt)
 	if err != nil {
 		err = fmt.Errorf("AI Grader lỗi khi tạo bài giảng: %w", err)
 		return

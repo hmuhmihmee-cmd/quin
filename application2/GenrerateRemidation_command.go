@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"meet-attendance-clean/domain2/assignment"
 	"meet-attendance-clean/domain2/lesson"
 	"meet-attendance-clean/domain2/mistake"
 	"strings"
@@ -33,17 +34,20 @@ type GenerateRemediationCommand struct {
 type GenerateRemediationLessonUsecase struct {
 	remediationTaskRepo RemediationTaskRepo
 	graphRepo           MistakeGraphRepo
+	assignmentRepo      AssignmentRepo
 	aiGenerator         RemediationAIGenerator
 }
 
 func NewGenerateRemediationLessonUsecase(
 	remediationTaskRepo RemediationTaskRepo,
 	graphRepo MistakeGraphRepo,
+	assignmentRepo AssignmentRepo,
 	aiGen RemediationAIGenerator,
 ) *GenerateRemediationLessonUsecase {
 	return &GenerateRemediationLessonUsecase{
 		remediationTaskRepo: remediationTaskRepo,
 		graphRepo:           graphRepo,
+		assignmentRepo:      assignmentRepo,
 		aiGenerator:         aiGen,
 	}
 }
@@ -75,7 +79,7 @@ func (u *GenerateRemediationLessonUsecase) Create(ctx context.Context, cmd Gener
 	if draft == nil {
 		return uuid.Nil(), errors.New("không tạo được bài học")
 	}
-	remediationTask, err := mistake.NewRemediationTask(cmd.StudentID, targetMistake.ID(), *draft)
+	remediationTask, err := mistake.NewRemediationTask(targetMistake.ID(), cmd.StudentID, *draft)
 	if err != nil {
 		return uuid.Nil(), fmt.Errorf("không thể tạo tác vụ chữa lỗi: %w", err)
 	}
@@ -113,7 +117,14 @@ func (u *GenerateRemediationLessonUsecase) processRemediationInBackground(
 	}
 	remediationTask.ApplyLesson(*remediationLesson)
 
+	newAssignment, err := assignment.NewRemediationAssignmentFromLesson(remediationTask.StudentID(), remediationLesson.Title(), *remediationLesson)
 	// 4. Lưu lại cây lỗi và hoàn tất draft
+	remediationTask.MarkAsAssigned(newAssignment.ID())
+	err = u.assignmentRepo.Save(bgCtx, newAssignment)
+	if err != nil {
+		remediationTask.ApplyError(fmt.Errorf("không thể lưu assignment: %w", err))
+		return
+	}
 	err = u.graphRepo.Save(bgCtx, graph)
 	if err != nil {
 		remediationTask.ApplyError(fmt.Errorf("không thể lưu cây lỗi: %w", err))

@@ -47,6 +47,7 @@ func NewAssignment(studentID uuid.UUID, title string, typ AssignmentType, items 
 		title:     title,
 		typ:       typ,
 		items:     items,
+		status:    AssignmentStatusPending,
 	}, nil
 }
 func (a *Assignment) ID() uuid.UUID { return a.id }
@@ -124,7 +125,7 @@ func (a *Assignment) IsCorrect() bool {
 }
 
 // NewAssignmentFromLesson là Factory tự động rã Lesson thành các AssignmentItem
-func NewAssignmentFromLesson(
+func NewNormalAssignmentFromLesson(
 	studentID uuid.UUID,
 	title string,
 	lsn lesson.Lesson,
@@ -141,4 +142,22 @@ func NewAssignmentFromLesson(
 	}
 
 	return NewAssignment(studentID, title, AssignmentTypeNormal, items...)
+}
+func NewRemediationAssignmentFromLesson(
+	studentID uuid.UUID,
+	title string,
+	lsn lesson.Lesson,
+) (*Assignment, error) {
+
+	// Tự động map từ exercise.Exercise sang AssignmentItem wrapper
+	items := make([]AssignmentItem, 0, len(lsn.Exercises()))
+	for _, ex := range lsn.Exercises() {
+		item, err := NewAssignmentItem(ex)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+
+	return NewAssignment(studentID, title, AssignmentTypeRemediation, items...)
 }

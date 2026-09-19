@@ -14,10 +14,6 @@ type AssignmentRepo interface {
 	Save(ctx context.Context, assignment *assignment.Assignment) error
 }
 
-type MistakeRepo interface {
-	SaveMistakes(ctx context.Context, studentID uuid.UUID, mistakes []mistake.Mistake) error
-}
-
 type WorkSpaceGateway interface {
 	FetchStudentSubmission(ctx context.Context, assignmentID uuid.UUID) (pageInk []byte, answers []assignment.Answer, err error)
 	PatchFeedback(ctx context.Context, assignmentID uuid.UUID, items []assignment.AssignmentItem) error
@@ -36,7 +32,6 @@ type GradeAssignmentCommand struct {
 
 type GradeAssignmentUsecase struct {
 	assignmentRepo   AssignmentRepo
-	mistakeRepo      MistakeRepo
 	remediationRepo  RemediationTaskRepo
 	misktakeGrapRepo MistakeGraphRepo
 	workspaceGateway WorkSpaceGateway
@@ -45,7 +40,6 @@ type GradeAssignmentUsecase struct {
 
 func NewGradeAssignmentUsecase(
 	assignmentRepo AssignmentRepo,
-	mistakeRepo MistakeRepo,
 	remediationRepo RemediationTaskRepo,
 	misktakeGrapRepo MistakeGraphRepo,
 	workspaceGateway WorkSpaceGateway,
@@ -53,7 +47,8 @@ func NewGradeAssignmentUsecase(
 ) *GradeAssignmentUsecase {
 	return &GradeAssignmentUsecase{
 		assignmentRepo:   assignmentRepo,
-		mistakeRepo:      mistakeRepo,
+		remediationRepo:  remediationRepo,
+		misktakeGrapRepo: misktakeGrapRepo,
 		workspaceGateway: workspaceGateway,
 		grader:           grader,
 	}
@@ -90,9 +85,24 @@ func (g *GradeAssignmentUsecase) Grade(ctx context.Context, cmd GradeAssignmentC
 		return fmt.Errorf("lỗi khi áp dụng kết quả chấm điểm: %w", err)
 	}
 
-	if len(detectedMistakes) > 0 && g.mistakeRepo != nil {
-		if err := g.mistakeRepo.SaveMistakes(ctx, a.StudentID(), detectedMistakes); err != nil {
-			return fmt.Errorf("không thể lưu danh sách lỗi sai của học sinh: %w", err)
+	if len(detectedMistakes) > 0 {
+		graph, err := g.misktakeGrapRepo.GetByStudentID(ctx, a.StudentID())
+		if err != nil {
+			return fmt.Errorf("không thể lấy cây lỗi của học sinh: %w", err)
+		}
+		task, err := g.remediationRepo.GetByAssinmentID(ctx, a.ID())
+		if err != nil {
+			return fmt.Errorf("không thể lấy task chữa lỗi của học sinh: %w", err)
+		}
+		var parentMistakeID *uuid.UUID
+		if task.AssignmentID() != nil {
+			parentMistakeID = task.AssignmentID()
+		}
+		for _, mistake := range detectedMistakes {
+			graph.RegisterMistake(parentMistakeID, mistake.Topic(), mistake.Reason(), mistake.AssignmentItemID())
+		}
+		if err := g.misktakeGrapRepo.Save(ctx, graph); err != nil {
+			return fmt.Errorf("không thể lưu cây lỗi: %w", err)
 		}
 	}
 

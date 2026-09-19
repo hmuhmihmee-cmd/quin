@@ -22,7 +22,7 @@ func (a MCQAnswer) IsValid(ex exercise.MultipleChoiceExercise) (bool, string) {
 		return false, "Chưa chọn đáp án trắc nghiệm"
 	}
 	for _, option := range ex.Options() {
-		if option == a.selectedOption {
+		if option.Label() == a.selectedOption {
 			return true, ""
 		}
 	}
@@ -39,8 +39,9 @@ type MCQEvalReq struct {
 func (e MCQEvalReq) ItemID() uuid.UUID { return e.itemID }
 
 type MCQEvalRes struct {
-	itemID  uuid.UUID
-	comment string
+	itemID           uuid.UUID
+	comment          string
+	detectedMistakes []DetectedMistake
 }
 
 func NewMCQEvalRes(itemID uuid.UUID, comment string) MCQEvalRes {
@@ -50,6 +51,9 @@ func NewMCQEvalRes(itemID uuid.UUID, comment string) MCQEvalRes {
 	}
 }
 func (e MCQEvalRes) ItemID() uuid.UUID { return e.itemID }
+func (e MCQEvalRes) DetectedMistakes() []DetectedMistake {
+	return e.detectedMistakes
+}
 
 type MCQAssignmentItem struct {
 	id        uuid.UUID
@@ -81,14 +85,20 @@ func (e *MCQAssignmentItem) ApplyEvalResult(res MCQEvalRes) []mistake.Mistake {
 		e.comment = "Chưa chọn đáp án"
 		return nil
 	}
+	var mistakes []mistake.Mistake
+	if res.DetectedMistakes() != nil {
+		for _, m := range res.DetectedMistakes() {
+			mistakes = append(mistakes, mistake.NewMistake(m.topic, m.reason, e.id))
+		}
+	}
 	if e.answer.selectedOption != e.exercise.Answer() {
 		e.comment = res.comment
 		e.isCorrect = false
-		return nil
+		return mistakes
 	}
 	e.isCorrect = true
 	e.comment = res.comment
-	return nil
+	return mistakes
 }
 
 func (e *MCQAssignmentItem) GenerateEvalRequest() MCQEvalReq {
